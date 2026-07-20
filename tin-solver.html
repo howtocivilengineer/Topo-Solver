@@ -1,0 +1,1179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TIN Solver — survey points to a reviewed surface</title>
+<style>
+:root{
+  --graphite:#1D2025;
+  --graphite-2:#262A31;
+  --graphite-3:#31363F;
+  --film:#F2F1EC;
+  --film-2:#E6E4DC;
+  --ink:#15171B;
+  --mute:#8A9099;
+  --lcd:#E0A100;
+  --pen-tin:#A6A79F;
+  --pen-break:#B5197E;
+  --pen-hull:#0E7C86;
+  --pen-contour:#7A5C2E;
+  --pen-flag:#D93025;
+  --pen-swap:#0B6E4F;
+  --ok:#2E8B57;
+  --stencil:"Arial Narrow","Helvetica Neue",Helvetica,Arial,sans-serif;
+  --data:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  background:var(--graphite);color:#D8DBDF;font-family:var(--data);font-size:12px;
+  display:flex;flex-direction:column;overflow:hidden;
+}
+h1,h2,h3,.stencil{font-family:var(--stencil);text-transform:uppercase;letter-spacing:.14em;font-weight:700}
+header{
+  display:flex;align-items:baseline;gap:14px;padding:9px 14px;
+  background:var(--graphite-2);border-bottom:1px solid #000;flex:0 0 auto;
+}
+header h1{font-size:15px;margin:0;color:#fff}
+header .sub{color:var(--mute);font-size:11px;letter-spacing:.04em}
+header .spacer{flex:1}
+main{flex:1;display:flex;min-height:0}
+.panel{
+  width:290px;flex:0 0 auto;background:var(--graphite-2);overflow-y:auto;
+  border-right:1px solid #000;padding-bottom:24px;
+}
+.panel.right{border-right:0;border-left:1px solid #000;width:310px}
+.stage{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--film)}
+section{border-bottom:1px solid #000;padding:10px 12px}
+section h2{font-size:11px;margin:0 0 8px;color:var(--lcd)}
+label.f{display:block;color:var(--mute);font-size:10px;letter-spacing:.1em;text-transform:uppercase;margin:6px 0 3px;font-family:var(--stencil)}
+select,input[type=text],input[type=number]{
+  width:100%;background:var(--graphite);color:#E6E9EC;border:1px solid var(--graphite-3);
+  border-radius:2px;padding:5px 6px;font-family:var(--data);font-size:12px;
+}
+input[type=range]{width:100%;accent-color:var(--lcd)}
+button{
+  font-family:var(--stencil);text-transform:uppercase;letter-spacing:.1em;font-size:11px;font-weight:700;
+  background:var(--graphite-3);color:#E6E9EC;border:1px solid #10131A;border-radius:2px;
+  padding:6px 9px;cursor:pointer;
+}
+button:hover{background:#3D434E}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--lcd);outline-offset:1px}
+button.primary{background:var(--lcd);color:#1A1200;border-color:#8A6500}
+button.primary:hover{background:#F0B518}
+button.wide{width:100%;margin-top:6px}
+button[disabled]{opacity:.4;cursor:not-allowed}
+.row{display:flex;gap:6px}
+.row>*{flex:1}
+.hint{color:var(--mute);font-size:11px;line-height:1.45;margin:6px 0 0}
+.kv{display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px dotted #363B44}
+.kv span:first-child{color:var(--mute)}
+.list{max-height:220px;overflow:auto;border:1px solid var(--graphite-3);border-radius:2px;background:#171A1F}
+.list table{width:100%;border-collapse:collapse;font-size:11px}
+.list th{position:sticky;top:0;background:var(--graphite-3);color:var(--mute);font-weight:400;text-align:left;padding:3px 5px;font-size:10px;letter-spacing:.08em}
+.list td{padding:2px 5px;border-bottom:1px solid #22262C;white-space:nowrap}
+.list tr:hover td{background:#22262C}
+.list tr.off td{color:#5A6069;text-decoration:line-through}
+.list tr.flag td:first-child{border-left:2px solid var(--pen-flag)}
+.list td.num{text-align:right}
+.chip{display:inline-block;padding:1px 5px;border-radius:2px;background:var(--graphite-3);font-size:10px}
+.swatch{display:inline-block;width:8px;height:8px;border-radius:1px;margin-right:5px;vertical-align:baseline}
+.codes{display:flex;flex-direction:column;gap:3px;max-height:170px;overflow:auto}
+.code{display:flex;align-items:center;gap:6px;padding:3px 5px;background:#171A1F;border:1px solid var(--graphite-3);border-radius:2px}
+.code .nm{flex:1;font-weight:700}
+.code .ct{color:var(--mute)}
+.code button{padding:2px 5px;font-size:9px;letter-spacing:.06em}
+.toolbar{
+  display:flex;gap:4px;align-items:center;padding:6px 8px;background:var(--graphite-2);
+  border-bottom:1px solid #000;flex:0 0 auto;flex-wrap:wrap;
+}
+.tool{background:transparent;border:1px solid var(--graphite-3);color:#B9BEC6}
+.tool.on{background:var(--lcd);color:#1A1200;border-color:#8A6500}
+.sep{width:1px;height:20px;background:var(--graphite-3);margin:0 3px}
+.lay{display:flex;align-items:center;gap:4px;color:#B9BEC6;font-size:11px;cursor:pointer}
+.lay input{accent-color:var(--lcd)}
+#wrap{flex:1;position:relative;min-height:0}
+canvas{display:block;width:100%;height:100%;cursor:crosshair;touch-action:none}
+.readout{
+  flex:0 0 auto;display:flex;gap:18px;align-items:center;padding:6px 12px;
+  background:var(--graphite);border-top:1px solid #000;color:var(--lcd);
+  font-size:12px;letter-spacing:.06em;overflow-x:auto;white-space:nowrap;
+}
+.readout b{color:#6D7681;font-weight:400;font-family:var(--stencil);letter-spacing:.12em;font-size:10px;margin-right:5px}
+.readout .msg{color:#9FE6B0}
+.readout .warn{color:#FF9E80}
+.drop{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  background:var(--film);color:#6E7A88;text-align:center;padding:30px;
+}
+.drop.hide{display:none}
+.drop .in{max-width:420px}
+.drop h3{font-size:14px;color:var(--ink);margin:0 0 8px}
+.drop p{font-size:12px;line-height:1.55;margin:0 0 14px}
+.drop.over{background:#E3ECEC;outline:2px dashed var(--pen-hull);outline-offset:-14px}
+.tag{font-family:var(--stencil);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--mute)}
+@media(max-width:900px){
+  main{flex-direction:column;overflow-y:auto}
+  .panel,.panel.right{width:100%;border:0;border-bottom:1px solid #000}
+  .stage{order:-1;height:62vh;flex:0 0 auto}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>TIN Solver</h1>
+  <span class="sub">build and review the surface from your own points, then hand it over as LandXML</span>
+  <span class="spacer"></span>
+  <span class="tag" id="fname">no file loaded</span>
+</header>
+
+<main>
+  <!-- ─────────── LEFT ─────────── -->
+  <div class="panel">
+    <section>
+      <h2>1 · Points file</h2>
+      <div class="row">
+        <button class="wide" id="btnOpen">Open .txt / .csv</button>
+        <button class="wide" id="btnSample">Load sample</button>
+      </div>
+      <input type="file" id="file" accept=".txt,.csv,.pnt,.asc,.dat" hidden>
+      <label class="f">Column order</label>
+      <select id="fmt">
+        <option value="pnezd" selected>P, N, E, Z, D — point, north, east, elev, code</option>
+        <option value="penzd">P, E, N, Z, D — point, east, north, elev, code</option>
+        <option value="nezd">N, E, Z, D</option>
+        <option value="enzd">E, N, Z, D</option>
+        <option value="pxyzd">P, X, Y, Z, D (x=east, y=north)</option>
+      </select>
+      <label class="f">Separator</label>
+      <select id="sep">
+        <option value="auto" selected>Detect automatically</option>
+        <option value=",">Comma</option>
+        <option value=" ">Space</option>
+        <option value="\t">Tab</option>
+        <option value=";">Semicolon</option>
+      </select>
+      <p class="hint" id="parseMsg">Lines that don't parse are skipped and listed here.</p>
+    </section>
+
+    <section>
+      <h2>2 · Codes</h2>
+      <div class="codes" id="codes"></div>
+      <p class="hint">Chain turns every point sharing a code into one breakline, in file order — that's how the points were shot, so that's the order the string was walked.</p>
+    </section>
+
+    <section>
+      <h2>Points</h2>
+      <label class="f">Filter by code or number</label>
+      <input type="text" id="pfilter" placeholder="e.g. EK  or  1024">
+      <div class="list" style="margin-top:6px">
+        <table>
+          <thead><tr><th>Pt</th><th>Code</th><th class="num">Elev</th><th class="num">Use</th></tr></thead>
+          <tbody id="ptbody"></tbody>
+        </table>
+      </div>
+      <p class="hint">Click a row to zoom to it. Untick to leave a point out of the surface — the point stays in the file, it just stops pulling the triangles around.</p>
+    </section>
+  </div>
+
+  <!-- ─────────── STAGE ─────────── -->
+  <div class="stage">
+    <div class="toolbar">
+      <button class="tool on" data-tool="pan" id="tPan">Pan</button>
+      <button class="tool" data-tool="break">Draw breakline</button>
+      <button class="tool" data-tool="swap">Swap edge</button>
+      <button class="tool" data-tool="off">Toggle point</button>
+      <span class="sep"></span>
+      <button id="btnZoomAll">Zoom all</button>
+      <button id="btnUndo">Undo edit</button>
+      <span class="sep"></span>
+      <label class="lay"><input type="checkbox" id="lTri" checked>Triangles</label>
+      <label class="lay"><input type="checkbox" id="lBrk" checked>Breaklines</label>
+      <label class="lay"><input type="checkbox" id="lPts" checked>Points</label>
+      <label class="lay"><input type="checkbox" id="lLab">Labels</label>
+      <label class="lay"><input type="checkbox" id="lCon">Contours</label>
+      <label class="lay"><input type="checkbox" id="lFlag" checked>Flags</label>
+    </div>
+    <div id="wrap">
+      <canvas id="cv"></canvas>
+      <div class="drop" id="drop">
+        <div class="in">
+          <h3>Drop a points file here</h3>
+          <p>Comma, space or tab separated. One point per line, point number first if you have one.
+             Nothing is uploaded anywhere — this page does all the work on your machine, offline.</p>
+          <button class="primary" id="btnSample2">Load a sample road survey instead</button>
+        </div>
+      </div>
+    </div>
+    <div class="readout">
+      <span><b>E</b><span id="rE">—</span></span>
+      <span><b>N</b><span id="rN">—</span></span>
+      <span><b>Z</b><span id="rZ">—</span></span>
+      <span><b>Near</b><span id="rP">—</span></span>
+      <span><b>Tris</b><span id="rT">0</span></span>
+      <span><b>Edits</b><span id="rEd">0</span></span>
+      <span class="msg" id="rMsg"></span>
+    </div>
+  </div>
+
+  <!-- ─────────── RIGHT ─────────── -->
+  <div class="panel right">
+    <section>
+      <h2>3 · Breaklines</h2>
+      <div class="list" style="max-height:150px">
+        <table>
+          <thead><tr><th>Name</th><th class="num">Pts</th><th class="num">On</th><th></th></tr></thead>
+          <tbody id="brkbody"></tbody>
+        </table>
+      </div>
+      <p class="hint" id="brkMsg">Draw breakline: click points in order, then press Enter to close the string, Esc to abandon it.</p>
+    </section>
+
+    <section>
+      <h2>4 · Review</h2>
+      <label class="f">Trim triangles longer than <span id="meLbl">—</span></label>
+      <input type="range" id="maxEdge" min="0" max="100" value="100">
+      <p class="hint">Cuts the long thin triangles that reach across the outside of the job. Slide left until the boundary matches where you actually surveyed.</p>
+      <label class="f">Contour interval</label>
+      <select id="cint">
+        <option value="0.1">0.1 m — detail / flat site</option>
+        <option value="0.2">0.2 m</option>
+        <option value="0.5" selected>0.5 m</option>
+        <option value="1">1 m</option>
+        <option value="2">2 m — steep ground</option>
+      </select>
+      <p class="hint">Every 5th contour draws heavy and exports to its own layer, the way an index contour should.</p>
+      <label class="lay"><input type="checkbox" id="cSmooth" checked>Smooth contours</label>
+      <p class="hint">Rounds the triangle-edge kinks so the drawn and exported contours read like a real survey plan. Turn off to see the raw TIN facets.</p>
+      <label class="f">Flag points more than this off their neighbours (m)</label>
+      <input type="number" id="ztol" value="0.5" step="0.05" min="0.01">
+      <div class="list" style="max-height:130px;margin-top:6px">
+        <table>
+          <thead><tr><th>Pt</th><th>Code</th><th class="num">Elev</th><th class="num">Off by</th></tr></thead>
+          <tbody id="flagbody"></tbody>
+        </table>
+      </div>
+      <p class="hint">A point sitting well above or below the ground around it is usually a rod height left wrong or a mis-typed elevation. Check it against the field notes before you send the surface on.</p>
+    </section>
+
+    <section>
+      <h2>Surface</h2>
+      <div class="kv"><span>Points used</span><span id="sPts">0</span></div>
+      <div class="kv"><span>Triangles</span><span id="sTri">0</span></div>
+      <div class="kv"><span>Breakline segs held</span><span id="sBrk">0</span></div>
+      <div class="kv"><span>Elev range</span><span id="sZ">—</span></div>
+      <div class="kv"><span>Plan area</span><span id="sA2">—</span></div>
+      <div class="kv"><span>Surface area</span><span id="sA3">—</span></div>
+    </section>
+
+    <section>
+      <h2>5 · Hand over</h2>
+      <label class="f">Surface name</label>
+      <input type="text" id="sname" value="EG-FIELD">
+      <button class="primary wide" id="exLX">Export LandXML surface</button>
+      <button class="wide" id="exDXF">Export DXF — points, faces, breaklines</button>
+      <button class="wide" id="exCON">Export DXF — contours at <span id="ivLbl">0.5</span> m</button>
+      <button class="wide" id="exPRJ">Save working file (.json)</button>
+      <button class="wide" id="btnLoadPrj">Reopen a working file</button>
+      <input type="file" id="prjfile" accept=".json" hidden>
+      <p class="hint">The LandXML carries the exact triangles on screen — every swap, every breakline, every point you left out. Imported into Civil 3D it comes in as your surface, not a fresh triangulation of your points.</p>
+    </section>
+  </div>
+</main>
+
+<script>
+/* ══════════════ geometry core ══════════════ */
+const EPS=1e-9;
+const orient=(a,b,c)=>(b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x);
+function inCircle(a,b,c,d){
+  const ax=a.x-d.x,ay=a.y-d.y,bx=b.x-d.x,by=b.y-d.y,cx=c.x-d.x,cy=c.y-d.y;
+  const ad=ax*ax+ay*ay,bd=bx*bx+by*by,cd=cx*cx+cy*cy;
+  return ax*(by*cd-bd*cy)-ay*(bx*cd-bd*cx)+ad*(bx*cy-by*cx);
+}
+const ekey=(i,j)=>i<j?i+':'+j:j+':'+i;
+
+class Tin{
+  constructor(pts){this.pts=pts;this.tris=[];this.edges=new Map();this.locked=new Set();}
+  _addTri(t){
+    if(orient(this.pts[t[0]],this.pts[t[1]],this.pts[t[2]])<0)t=[t[0],t[2],t[1]];
+    const i=this.tris.length;this.tris.push(t);this._link(i,t);return i;
+  }
+  _link(i,t){for(let e=0;e<3;e++){const k=ekey(t[e],t[(e+1)%3]);let a=this.edges.get(k);if(!a){a=[];this.edges.set(k,a);}a.push(i);}}
+  _unlink(i){const t=this.tris[i];if(!t)return;
+    for(let e=0;e<3;e++){const k=ekey(t[e],t[(e+1)%3]);const a=this.edges.get(k);if(!a)continue;
+      const p=a.indexOf(i);if(p>=0)a.splice(p,1);if(!a.length)this.edges.delete(k);}}
+  _rm(i){this._unlink(i);this.tris[i]=null;}
+  build(){
+    const pts=this.pts,n=pts.length;
+    let mnx=1/0,mny=1/0,mxx=-1/0,mxy=-1/0;
+    for(const p of pts){if(p.x<mnx)mnx=p.x;if(p.x>mxx)mxx=p.x;if(p.y<mny)mny=p.y;if(p.y>mxy)mxy=p.y;}
+    const dx=mxx-mnx||1,dy=mxy-mny||1,cx=(mnx+mxx)/2,cy=(mny+mxy)/2,D=Math.max(dx,dy)*20;
+    pts.push({x:cx-D,y:cy-D},{x:cx+D,y:cy-D},{x:cx,y:cy+D});
+    this._addTri([n,n+1,n+2]);
+    const order=Array.from({length:n},(_,i)=>i);
+    const cell=Math.max(dx,dy)/Math.max(1,Math.ceil(Math.sqrt(n)))||1;
+    order.sort((a,b)=>{
+      const ra=Math.floor((pts[a].y-mny)/cell),rb=Math.floor((pts[b].y-mny)/cell);
+      if(ra!==rb)return ra-rb;
+      return ra%2?pts[b].x-pts[a].x:pts[a].x-pts[b].x;
+    });
+    for(const i of order)this._ins(i);
+    for(let t=0;t<this.tris.length;t++){const tr=this.tris[t];
+      if(tr&&(tr[0]>=n||tr[1]>=n||tr[2]>=n))this._rm(t);}
+    pts.length=n;return this;
+  }
+  _ins(i){
+    const p=this.pts[i],bad=[];
+    for(let t=0;t<this.tris.length;t++){const tr=this.tris[t];if(!tr)continue;
+      if(inCircle(this.pts[tr[0]],this.pts[tr[1]],this.pts[tr[2]],p)>EPS)bad.push(t);}
+    if(!bad.length)return;
+    const cnt=new Map();
+    for(const t of bad){const tr=this.tris[t];
+      for(let e=0;e<3;e++){const a=tr[e],b=tr[(e+1)%3],k=ekey(a,b);
+        const c=cnt.get(k);if(c)c.n++;else cnt.set(k,{n:1,a,b});}}
+    for(const t of bad)this._rm(t);
+    for(const {n,a,b} of cnt.values())if(n===1)this._addTri([a,b,i]);
+  }
+  compact(){
+    const out=[];for(const t of this.tris)if(t)out.push(t);
+    this.tris=out;this.edges=new Map();
+    for(let i=0;i<out.length;i++)this._link(i,out[i]);
+    return this;
+  }
+  _opp(p,q){
+    const a=this.edges.get(ekey(p,q));if(!a||a.length!==2)return null;
+    const r=[];for(const t of a){for(const v of this.tris[t])if(v!==p&&v!==q)r.push(v);}
+    return r.length===2?{r:r[0],l:r[1],t1:a[0],t2:a[1]}:null;
+  }
+  _convex(p,r,q,l){
+    const P=this.pts,s=[orient(P[p],P[r],P[q]),orient(P[r],P[q],P[l]),orient(P[q],P[l],P[p]),orient(P[l],P[p],P[r])];
+    return s.every(v=>v>EPS)||s.every(v=>v<-EPS);
+  }
+  flip(p,q){
+    const o=this._opp(p,q);if(!o)return null;
+    if(!this._convex(p,o.r,q,o.l))return null;
+    this._rm(o.t1);this._rm(o.t2);
+    this._addTri([p,o.r,o.l]);this._addTri([q,o.l,o.r]);
+    return [o.r,o.l];
+  }
+  _cross(a,b,p,q){
+    if(p===a||p===b||q===a||q===b)return false;
+    const P=this.pts;
+    const d1=orient(P[a],P[b],P[p]),d2=orient(P[a],P[b],P[q]);
+    const d3=orient(P[p],P[q],P[a]),d4=orient(P[p],P[q],P[b]);
+    return ((d1>EPS&&d2<-EPS)||(d1<-EPS&&d2>EPS))&&((d3>EPS&&d4<-EPS)||(d3<-EPS&&d4>EPS));
+  }
+  constrain(a,b){
+    if(a===b)return false;
+    const key=ekey(a,b);
+    if(this.edges.has(key)){this.locked.add(key);return true;}
+    let cross=[];
+    for(const k of this.edges.keys()){
+      const i=k.indexOf(':'),p=+k.slice(0,i),q=+k.slice(i+1);
+      if(this._cross(a,b,p,q))cross.push([p,q]);
+    }
+    const fresh=[];let guard=cross.length*40+200;
+    while(cross.length&&guard-- >0){
+      const [p,q]=cross.shift();
+      if(!this.edges.has(ekey(p,q)))continue;
+      const res=this.flip(p,q);
+      if(!res){cross.push([p,q]);continue;}
+      const [r,l]=res;
+      if(this._cross(a,b,r,l))cross.push([r,l]);else fresh.push([r,l]);
+    }
+    if(!this.edges.has(key))return false;
+    this.locked.add(key);
+    let pass=fresh.slice(),rounds=0;
+    while(pass.length&&rounds++<50){
+      const next=[];
+      for(const [p,q] of pass){
+        const k=ekey(p,q);
+        if(this.locked.has(k)||!this.edges.has(k))continue;
+        const o=this._opp(p,q);if(!o)continue;
+        const P=this.pts,t=this.tris[o.t1];
+        const cc=orient(P[t[0]],P[t[1]],P[t[2]])>0?t:[t[0],t[2],t[1]];
+        const far=cc.includes(o.r)?o.l:o.r;
+        if(inCircle(P[cc[0]],P[cc[1]],P[cc[2]],P[far])>EPS){
+          if(this.flip(p,q))next.push([p,o.r],[o.r,q],[q,o.l],[o.l,p]);
+        }
+      }
+      pass=next;
+    }
+    return true;
+  }
+}
+
+/* ══════════════ state ══════════════ */
+const S={
+  file:'', raw:[],            // {id,e,n,z,code,use}
+  org:{e:0,n:0},
+  brk:[],                     // {name,code,ids:[],on}
+  swaps:[],                   // [idA,idB] user diagonals
+  tin:null, idx:new Map(), loc:[], act:[],
+  keep:new Set(),             // triangle indices passing trim
+  contours:[], flags:[], hull:[],
+  view:{s:1,ox:0,oy:0}, tool:'pan', draft:[],
+  maxEdgePct:100, maxEdgeVal:Infinity, held:0, longest:1
+};
+const $=id=>document.getElementById(id);
+const cv=$('cv'),ctx=cv.getContext('2d');
+const fmt=(v,d=3)=>v==null||!isFinite(v)?'—':v.toFixed(d);
+const msg=(t,warn)=>{const r=$('rMsg');r.textContent=t;r.className=warn?'warn':'msg';};
+
+/* ══════════════ parse ══════════════ */
+function detectSep(lines){
+  const c=['\t',',',';',' '];
+  for(const s of c){const hits=lines.filter(l=>l.split(s).length>=3).length;
+    if(hits>lines.length*0.7)return s;}
+  return /\s+/;
+}
+function parse(text){
+  const lines=text.split(/\r?\n/).map(l=>l.trim()).filter(l=>l&&!/^[#/;]/.test(l));
+  let sep=$('sep').value;
+  sep=sep==='auto'?detectSep(lines.slice(0,40)):(sep==='\\t'?'\t':sep);
+  const order=$('fmt').value;
+  const map={pnezd:['p','n','e','z','d'],penzd:['p','e','n','z','d'],
+             nezd:['n','e','z','d'],enzd:['e','n','z','d'],pxyzd:['p','e','n','z','d']}[order];
+  const out=[],bad=[];let auto=1;
+  for(const l of lines){
+    const f=(typeof sep==='string'?l.split(sep):l.split(sep)).map(s=>s.trim()).filter(s=>s!=='');
+    if(f.length<map.length-1){bad.push(l);continue;}
+    const r={};
+    map.forEach((k,i)=>{r[k]=f[i]});
+    if(map.length<f.length)r.d=f.slice(map.length-1).join(' ');
+    const e=parseFloat(r.e),n=parseFloat(r.n),z=parseFloat(r.z);
+    if(!isFinite(e)||!isFinite(n)||!isFinite(z)){bad.push(l);continue;}
+    out.push({id:r.p!==undefined?String(r.p):String(auto++),e,n,z,
+              code:(r.d||'').toUpperCase().trim()||'—',use:true});
+  }
+  return {out,bad};
+}
+function loadPoints(text,name){
+  const {out,bad}=parse(text);
+  if(!out.length){$('parseMsg').textContent='No points read. Check the column order and separator above.';return;}
+  S.raw=out;S.file=name;S.brk=[];S.swaps=[];
+  $('fname').textContent=name+' · '+out.length+' points';
+  $('parseMsg').textContent=bad.length?bad.length+' line(s) skipped — first was: '+bad[0].slice(0,40):
+    out.length+' points read, '+new Set(out.map(p=>p.code)).size+' codes.';
+  $('drop').classList.add('hide');
+  rebuild();zoomAll();
+}
+
+/* ══════════════ rebuild ══════════════ */
+function rebuild(){
+  S.act=S.raw.filter(p=>p.use);
+  if(S.act.length<3){S.tin=null;draw();stats();return;}
+  S.org.e=S.act[0].e;S.org.n=S.act[0].n;
+  S.loc=S.act.map(p=>({x:p.e-S.org.e,y:p.n-S.org.n}));
+  S.idx=new Map();S.act.forEach((p,i)=>S.idx.set(p.id,i));
+  const t0=performance.now();
+  const tin=new Tin(S.loc.map(p=>({x:p.x,y:p.y}))).build().compact();
+  S.held=0;let want=0;
+  for(const b of S.brk){
+    if(!b.on)continue;
+    for(let i=0;i<b.ids.length-1;i++){
+      const a=S.idx.get(b.ids[i]),c=S.idx.get(b.ids[i+1]);
+      if(a===undefined||c===undefined)continue;
+      want++;if(tin.constrain(a,c))S.held++;
+    }
+  }
+  // Swaps replay as one pure flip each: the recorded diagonal p–q is found and
+  // turned into r–l. Nothing else in the triangulation is allowed to move.
+  S.swapKeys=new Set();S.stale=0;
+  for(const s of S.swaps){
+    const p=S.idx.get(s.p),q=S.idx.get(s.q);
+    if(p===undefined||q===undefined){s.stale=true;S.stale++;continue;}
+    const k=ekey(p,q);
+    if(!tin.edges.has(k)||tin.locked.has(k)){s.stale=true;S.stale++;continue;}
+    const o=tin._opp(p,q);
+    if(!o||S.act[o.r].id!==s.r||S.act[o.l].id!==s.l){
+      if(o&&S.act[o.r].id===s.l&&S.act[o.l].id===s.r){/* same pair, other order */}
+      else{s.stale=true;S.stale++;continue;}
+    }
+    const res=tin.flip(p,q);
+    if(!res){s.stale=true;S.stale++;continue;}
+    s.stale=false;S.swapKeys.add(ekey(res[0],res[1]));
+  }
+  tin.compact();
+  S.swapKeys=new Set([...S.swaps].filter(s=>!s.stale).map(s=>ekey(S.idx.get(s.r),S.idx.get(s.l))));
+  S.tin=tin;S.brkWant=want;
+  trim();findHull();findFlags();makeContours();
+  draw();stats();
+  const ms=Math.round(performance.now()-t0);
+  const notes=[];
+  if(want>S.held)notes.push((want-S.held)+' breakline segment(s) crossed another and could not be held');
+  if(S.stale)notes.push(S.stale+' swap(s) no longer apply — the edge they moved is gone');
+  msg(S.tin.tris.length+' triangles in '+ms+' ms'+(notes.length?' — '+notes.join('; '):''),notes.length>0);
+}
+function triLongest(t){
+  const P=S.loc;let m=0;
+  for(let e=0;e<3;e++){
+    const a=P[t[e]],b=P[t[(e+1)%3]];
+    m=Math.max(m,Math.hypot(a.x-b.x,a.y-b.y));
+  }
+  return m;
+}
+function trim(){
+  if(!S.tin)return;
+  let long=0;const lens=S.tin.tris.map(t=>{const l=triLongest(t);if(l>long)long=l;return l;});
+  S.longest=long||1;
+  const pct=S.maxEdgePct;
+  S.maxEdgeVal=pct>=100?Infinity:(long*Math.pow(pct/100,2));
+  S.keep=new Set();
+  lens.forEach((l,i)=>{if(l<=S.maxEdgeVal)S.keep.add(i)});
+  $('meLbl').textContent=pct>=100?'(no trim)':fmt(S.maxEdgeVal,1)+' m';
+}
+function findHull(){
+  S.hull=[];
+  if(!S.tin)return;
+  for(const [k,v] of S.tin.edges){
+    const n=v.filter(i=>S.keep.has(i)).length;
+    if(n===1){const i=k.indexOf(':');S.hull.push([+k.slice(0,i),+k.slice(i+1)]);}
+  }
+}
+function findFlags(){
+  S.flags=[];
+  if(!S.tin)return;
+  const tol=parseFloat($('ztol').value)||0.5;
+  const nb=new Map();
+  for(const k of S.tin.edges.keys()){
+    const i=k.indexOf(':'),a=+k.slice(0,i),b=+k.slice(i+1);
+    if(!nb.has(a))nb.set(a,[]);if(!nb.has(b))nb.set(b,[]);
+    nb.get(a).push(b);nb.get(b).push(a);
+  }
+  for(const [i,list] of nb){
+    if(list.length<3)continue;
+    let sw=0,sz=0;
+    for(const j of list){
+      const d=Math.hypot(S.loc[i].x-S.loc[j].x,S.loc[i].y-S.loc[j].y)||0.001;
+      const w=1/d;sw+=w;sz+=w*S.act[j].z;
+    }
+    const pred=sz/sw,off=S.act[i].z-pred;
+    if(Math.abs(off)>tol)S.flags.push({i,off});
+  }
+  S.flags.sort((a,b)=>Math.abs(b.off)-Math.abs(a.off));
+}
+// Segments are stitched together by the triangle edge each crossing sits on, so
+// the join is exact — no coordinate rounding, no gaps at the seams.
+function chain(segs){
+  const at=new Map();
+  segs.forEach((s,i)=>{
+    for(const k of [s.ka,s.kb]){let a=at.get(k);if(!a){a=[];at.set(k,a);}a.push(i);}
+  });
+  const used=new Array(segs.length).fill(false),out=[];
+  const step=(cur,line,front)=>{
+    for(;;){
+      const list=at.get(cur)||[];
+      const j=list.find(x=>!used[x]);
+      if(j===undefined)return;
+      used[j]=true;
+      const s=segs[j],fwd=s.ka===cur;
+      const pt=fwd?s.pb:s.pa;
+      front?line.unshift(pt):line.push(pt);
+      cur=fwd?s.kb:s.ka;
+    }
+  };
+  for(let i=0;i<segs.length;i++){
+    if(used[i])continue;
+    used[i]=true;
+    const line=[segs[i].pa,segs[i].pb];
+    step(segs[i].kb,line,false);
+    step(segs[i].ka,line,true);
+    if(line.length>1)out.push(line);
+  }
+  return out;
+}
+// Chaikin corner-cutting: smooths a polyline without overshooting (contours
+// never balloon past their own hull, so they can't cross). Handles closed loops.
+function smoothLine(line,iters){
+  if(line.length<3)return line;
+  const closed=Math.hypot(line[0].x-line[line.length-1].x,line[0].y-line[line.length-1].y)<1e-6;
+  let pts=closed?line.slice(0,-1):line.slice();
+  for(let it=0;it<iters;it++){
+    const n=pts.length,out=[];
+    if(!closed)out.push(pts[0]);
+    const last=closed?n:n-1;
+    for(let i=0;i<last;i++){
+      const a=pts[i],b=pts[(i+1)%n];
+      out.push({x:a.x*0.75+b.x*0.25,y:a.y*0.75+b.y*0.25});
+      out.push({x:a.x*0.25+b.x*0.75,y:a.y*0.25+b.y*0.75});
+    }
+    if(!closed)out.push(pts[n-1]);
+    pts=out;
+  }
+  if(closed)pts.push({x:pts[0].x,y:pts[0].y});
+  return pts;
+}
+function makeContours(force){
+  S.contours=[];
+  if(!S.tin||(!$('lCon').checked&&!force))return;
+  const iv=parseFloat($('cint').value)||0.5;
+  let zmin=1/0,zmax=-1/0;
+  S.tin.tris.forEach((t,ti)=>{if(!S.keep.has(ti))return;
+    for(const v of t){const z=S.act[v].z;if(z<zmin)zmin=z;if(z>zmax)zmax=z;}});
+  if(!isFinite(zmin))return;
+  if((zmax-zmin)/iv>2000){msg('That interval gives over 2000 contours across this job — pick a coarser one',true);return;}
+  for(let k=Math.ceil(zmin/iv);k<=Math.floor(zmax/iv);k++){
+    const z=k*iv,segs=[];
+    S.tin.tris.forEach((t,ti)=>{
+      if(!S.keep.has(ti))return;
+      const cr=[];
+      for(let e=0;e<3;e++){
+        const a=t[e],b=t[(e+1)%3],za=S.act[a].z,zb=S.act[b].z;
+        if((za<z&&zb>=z)||(zb<z&&za>=z)){
+          const f=(z-za)/(zb-za);
+          cr.push({k:ekey(a,b),p:{x:S.loc[a].x+f*(S.loc[b].x-S.loc[a].x),
+                                 y:S.loc[a].y+f*(S.loc[b].y-S.loc[a].y)}});
+        }
+      }
+      if(cr.length===2)segs.push({ka:cr[0].k,kb:cr[1].k,pa:cr[0].p,pb:cr[1].p});
+    });
+    if(segs.length){
+      let lines=chain(segs);
+      const sm=$('cSmooth');
+      if(!sm||sm.checked)lines=lines.map(L=>smoothLine(L,2));
+      S.contours.push({z,major:k%5===0,lines});
+    }
+  }
+}
+
+/* ══════════════ view ══════════════ */
+function resize(){
+  const r=cv.parentElement.getBoundingClientRect(),d=window.devicePixelRatio||1;
+  cv.width=r.width*d;cv.height=r.height*d;ctx.setTransform(d,0,0,d,0,0);
+  draw();
+}
+const X=p=>(p.x-S.view.ox)*S.view.s, Y=p=>(-(p.y-S.view.oy))*S.view.s;
+const invX=sx=>sx/S.view.s+S.view.ox, invY=sy=>-sy/S.view.s+S.view.oy;
+function zoomAll(){
+  if(!S.loc.length)return;
+  let mnx=1/0,mny=1/0,mxx=-1/0,mxy=-1/0;
+  for(const p of S.loc){mnx=Math.min(mnx,p.x);mxx=Math.max(mxx,p.x);mny=Math.min(mny,p.y);mxy=Math.max(mxy,p.y);}
+  const w=cv.clientWidth,h=cv.clientHeight;
+  S.view.s=Math.min(w/((mxx-mnx)||1),h/((mxy-mny)||1))*0.88;
+  S.view.ox=(mnx+mxx)/2-w/2/S.view.s;
+  S.view.oy=(mny+mxy)/2+h/2/S.view.s;
+  draw();
+}
+
+/* ══════════════ draw ══════════════ */
+const CSS=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function codeColor(c){
+  let h=0;for(let i=0;i<c.length;i++)h=(h*31+c.charCodeAt(i))|0;
+  return 'hsl('+(Math.abs(h)%360)+' 55% 34%)';
+}
+function draw(){
+  const w=cv.clientWidth,h=cv.clientHeight;
+  ctx.clearRect(0,0,w,h);
+  if(!S.tin){return;}
+  // triangles
+  if($('lTri').checked){
+    ctx.strokeStyle=CSS('--pen-tin');ctx.lineWidth=0.6;ctx.beginPath();
+    S.tin.tris.forEach((t,i)=>{
+      if(!S.keep.has(i))return;
+      const a=S.loc[t[0]],b=S.loc[t[1]],c=S.loc[t[2]];
+      ctx.moveTo(X(a),Y(a));ctx.lineTo(X(b),Y(b));ctx.lineTo(X(c),Y(c));ctx.closePath();
+    });
+    ctx.stroke();
+    // hull
+    ctx.strokeStyle=CSS('--pen-hull');ctx.lineWidth=1.4;ctx.beginPath();
+    for(const [a,b] of S.hull){ctx.moveTo(X(S.loc[a]),Y(S.loc[a]));ctx.lineTo(X(S.loc[b]),Y(S.loc[b]));}
+    ctx.stroke();
+  }
+  // swapped edges
+  if($('lTri').checked&&S.swapKeys&&S.swapKeys.size){
+    ctx.strokeStyle=CSS('--pen-swap');ctx.lineWidth=1.8;ctx.beginPath();
+    for(const k of S.swapKeys){
+      const i=k.indexOf(':'),a=+k.slice(0,i),b=+k.slice(i+1);
+      if(!S.loc[a]||!S.loc[b])continue;
+      ctx.moveTo(X(S.loc[a]),Y(S.loc[a]));ctx.lineTo(X(S.loc[b]),Y(S.loc[b]));
+    }
+    ctx.stroke();
+  }
+  // contours
+  if($('lCon').checked){
+    ctx.strokeStyle=CSS('--pen-contour');ctx.lineJoin='round';
+    for(const c of S.contours){
+      ctx.lineWidth=c.major?1.5:0.7;
+      ctx.globalAlpha=c.major?1:0.5;
+      ctx.beginPath();
+      for(const L of c.lines){
+        L.forEach((p,i)=>i?ctx.lineTo(X(p),Y(p)):ctx.moveTo(X(p),Y(p)));
+      }
+      ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+  }
+  // breaklines
+  if($('lBrk').checked){
+    ctx.lineWidth=2.2;ctx.lineJoin='round';
+    for(const b of S.brk){
+      if(!b.on)continue;
+      ctx.strokeStyle=CSS('--pen-break');ctx.beginPath();let started=false;
+      for(const id of b.ids){
+        const i=S.idx.get(id);if(i===undefined){started=false;continue;}
+        const p=S.loc[i];started?ctx.lineTo(X(p),Y(p)):ctx.moveTo(X(p),Y(p));started=true;
+      }
+      ctx.stroke();
+    }
+  }
+  // draft breakline
+  if(S.draft.length){
+    ctx.strokeStyle=CSS('--lcd');ctx.lineWidth=2;ctx.setLineDash([5,4]);ctx.beginPath();
+    S.draft.forEach((id,k)=>{const i=S.idx.get(id);if(i===undefined)return;
+      const p=S.loc[i];k?ctx.lineTo(X(p),Y(p)):ctx.moveTo(X(p),Y(p));});
+    ctx.stroke();ctx.setLineDash([]);
+  }
+  // points
+  if($('lPts').checked){
+    const r=S.view.s>0.6?2.6:1.6;
+    for(let i=0;i<S.act.length;i++){
+      const p=S.loc[i],sx=X(p),sy=Y(p);
+      if(sx<-20||sy<-20||sx>w+20||sy>h+20)continue;
+      ctx.fillStyle=codeColor(S.act[i].code);
+      ctx.fillRect(sx-r/2,sy-r/2,r,r);
+    }
+    if($('lLab').checked&&S.view.s>1.2){
+      ctx.font='9px ui-monospace,monospace';ctx.fillStyle=CSS('--ink');
+      for(let i=0;i<S.act.length;i++){
+        const p=S.loc[i],sx=X(p),sy=Y(p);
+        if(sx<0||sy<0||sx>w||sy>h)continue;
+        ctx.fillText(S.act[i].id+' '+S.act[i].code,sx+4,sy-4);
+        ctx.fillText(S.act[i].z.toFixed(2),sx+4,sy+8);
+      }
+    }
+  }
+  // excluded points
+  ctx.fillStyle='#B9BEC6';
+  for(const p of S.raw){
+    if(p.use)continue;
+    const sx=X({x:p.e-S.org.e}),sy=Y({y:p.n-S.org.n});
+    ctx.beginPath();ctx.moveTo(sx-3,sy-3);ctx.lineTo(sx+3,sy+3);
+    ctx.moveTo(sx+3,sy-3);ctx.lineTo(sx-3,sy+3);ctx.strokeStyle='#B9BEC6';ctx.lineWidth=1;ctx.stroke();
+  }
+  // flags
+  if($('lFlag').checked){
+    ctx.strokeStyle=CSS('--pen-flag');ctx.lineWidth=1.4;
+    for(const f of S.flags.slice(0,60)){
+      const p=S.loc[f.i];ctx.beginPath();ctx.arc(X(p),Y(p),5,0,6.283);ctx.stroke();
+    }
+  }
+}
+
+/* ══════════════ stats & tables ══════════════ */
+function stats(){
+  $('sPts').textContent=S.act.length;
+  const nt=S.tin?S.keep.size:0;
+  $('sTri').textContent=nt;$('rT').textContent=nt;
+  $('sBrk').textContent=S.held+' / '+(S.brkWant||0);
+  $('rEd').textContent=S.swaps.length+S.raw.filter(p=>!p.use).length;
+  if(!S.tin){$('sZ').textContent='—';$('sA2').textContent='—';$('sA3').textContent='—';return;}
+  let zmin=1/0,zmax=-1/0;for(const p of S.act){zmin=Math.min(zmin,p.z);zmax=Math.max(zmax,p.z);}
+  $('sZ').textContent=fmt(zmin,2)+' – '+fmt(zmax,2);
+  let a2=0,a3=0;
+  S.tin.tris.forEach((t,i)=>{
+    if(!S.keep.has(i))return;
+    const A=S.loc[t[0]],B=S.loc[t[1]],C=S.loc[t[2]];
+    a2+=Math.abs(orient(A,B,C))/2;
+    const ux=B.x-A.x,uy=B.y-A.y,uz=S.act[t[1]].z-S.act[t[0]].z;
+    const vx=C.x-A.x,vy=C.y-A.y,vz=S.act[t[2]].z-S.act[t[0]].z;
+    a3+=Math.hypot(uy*vz-uz*vy,uz*vx-ux*vz,ux*vy-uy*vx)/2;
+  });
+  $('sA2').textContent=a2>10000?fmt(a2/10000,3)+' ha':fmt(a2,1)+' m²';
+  $('sA3').textContent=a3>10000?fmt(a3/10000,3)+' ha':fmt(a3,1)+' m²';
+  tables();
+}
+function tables(){
+  // codes
+  const groups=new Map();
+  for(const p of S.raw){if(!groups.has(p.code))groups.set(p.code,[]);groups.get(p.code).push(p);}
+  const cw=$('codes');cw.innerHTML='';
+  for(const [c,list] of [...groups].sort((a,b)=>b[1].length-a[1].length)){
+    const d=document.createElement('div');d.className='code';
+    d.innerHTML='<span class="swatch" style="background:'+codeColor(c)+'"></span>'+
+      '<span class="nm">'+c+'</span><span class="ct">'+list.length+'</span>';
+    const b=document.createElement('button');b.textContent='Chain';
+    b.onclick=()=>chainCode(c);
+    const o=document.createElement('button');o.textContent='Hide';
+    o.onclick=()=>{const any=list.some(p=>p.use);list.forEach(p=>p.use=!any);rebuild();};
+    d.append(b,o);cw.append(d);
+  }
+  // points
+  const f=$('pfilter').value.trim().toUpperCase();
+  const rows=S.raw.filter(p=>!f||p.code.includes(f)||p.id.includes(f)).slice(0,400);
+  const flagged=new Set(S.flags.map(x=>S.act[x.i].id));
+  const tb=$('ptbody');tb.innerHTML='';
+  for(const p of rows){
+    const tr=document.createElement('tr');
+    tr.className=(p.use?'':'off ')+(flagged.has(p.id)?'flag':'');
+    tr.innerHTML='<td>'+p.id+'</td><td><span class="swatch" style="background:'+codeColor(p.code)+
+      '"></span>'+p.code+'</td><td class="num">'+p.z.toFixed(3)+'</td>';
+    const td=document.createElement('td');td.className='num';
+    const cb=document.createElement('input');cb.type='checkbox';cb.checked=p.use;
+    cb.onclick=e=>{e.stopPropagation();p.use=cb.checked;rebuild();};
+    td.append(cb);tr.append(td);
+    tr.onclick=()=>{S.view.s=Math.max(S.view.s,6);
+      S.view.ox=p.e-S.org.e-cv.clientWidth/2/S.view.s;
+      S.view.oy=p.n-S.org.n+cv.clientHeight/2/S.view.s;draw();};
+    tb.append(tr);
+  }
+  // breaklines
+  const bb=$('brkbody');bb.innerHTML='';
+  S.brk.forEach((b,i)=>{
+    const tr=document.createElement('tr');if(!b.on)tr.className='off';
+    tr.innerHTML='<td>'+b.name+'</td><td class="num">'+b.ids.length+'</td>';
+    const t1=document.createElement('td');t1.className='num';
+    const cb=document.createElement('input');cb.type='checkbox';cb.checked=b.on;
+    cb.onclick=()=>{b.on=cb.checked;rebuild();};t1.append(cb);
+    const t2=document.createElement('td');
+    const del=document.createElement('button');del.textContent='×';del.style.padding='0 5px';
+    del.onclick=()=>{S.brk.splice(i,1);rebuild();};t2.append(del);
+    tr.append(t1,t2);bb.append(tr);
+  });
+  // flags
+  const fb=$('flagbody');fb.innerHTML='';
+  for(const fl of S.flags.slice(0,25)){
+    const p=S.act[fl.i];
+    const tr=document.createElement('tr');
+    tr.innerHTML='<td>'+p.id+'</td><td>'+p.code+'</td><td class="num">'+p.z.toFixed(3)+
+      '</td><td class="num" style="color:var(--pen-flag)">'+(fl.off>0?'+':'')+fl.off.toFixed(3)+'</td>';
+    tr.onclick=()=>{S.view.s=Math.max(S.view.s,6);
+      S.view.ox=S.loc[fl.i].x-cv.clientWidth/2/S.view.s;
+      S.view.oy=S.loc[fl.i].y+cv.clientHeight/2/S.view.s;draw();};
+    fb.append(tr);
+  }
+}
+
+/* ══════════════ breaklines ══════════════ */
+function chainCode(c){
+  const ids=S.raw.filter(p=>p.code===c&&p.use).map(p=>p.id);
+  if(ids.length<2){msg('Code '+c+' has fewer than two points in use',true);return;}
+  S.brk.push({name:c+'-'+(S.brk.filter(b=>b.code===c).length+1),code:c,ids,on:true});
+  rebuild();msg('Chained '+ids.length+' points on code '+c);
+}
+function finishDraft(){
+  if(S.draft.length>1){
+    S.brk.push({name:'BL-'+(S.brk.length+1),code:'MANUAL',ids:S.draft.slice(),on:true});
+    rebuild();msg('Breakline of '+S.draft.length+' points added');
+  }
+  S.draft=[];draw();
+}
+
+/* ══════════════ picking ══════════════ */
+function nearPoint(sx,sy,tol){
+  let best=-1,bd=tol*tol;
+  for(let i=0;i<S.act.length;i++){
+    const dx=X(S.loc[i])-sx,dy=Y(S.loc[i])-sy,d=dx*dx+dy*dy;
+    if(d<bd){bd=d;best=i;}
+  }
+  return best;
+}
+function nearRaw(sx,sy,tol){
+  let best=-1,bd=tol*tol;
+  S.raw.forEach((p,i)=>{
+    const dx=X({x:p.e-S.org.e})-sx,dy=Y({y:p.n-S.org.n})-sy,d=dx*dx+dy*dy;
+    if(d<bd){bd=d;best=i;}
+  });
+  return best;
+}
+function nearEdge(sx,sy,tol){
+  if(!S.tin)return null;
+  let best=null,bd=tol;
+  for(const [k,v] of S.tin.edges){
+    if(!v.some(i=>S.keep.has(i)))continue;
+    const i=k.indexOf(':'),a=+k.slice(0,i),b=+k.slice(i+1);
+    const ax=X(S.loc[a]),ay=Y(S.loc[a]),bx=X(S.loc[b]),by=Y(S.loc[b]);
+    const dx=bx-ax,dy=by-ay,L=dx*dx+dy*dy;
+    let t=L?((sx-ax)*dx+(sy-ay)*dy)/L:0;t=Math.max(0,Math.min(1,t));
+    const d=Math.hypot(sx-ax-t*dx,sy-ay-t*dy);
+    if(d<bd){bd=d;best=[a,b,k];}
+  }
+  return best;
+}
+
+/* ══════════════ interaction ══════════════ */
+let drag=null;
+cv.addEventListener('pointerdown',e=>{
+  const r=cv.getBoundingClientRect(),sx=e.clientX-r.left,sy=e.clientY-r.top;
+  if(S.tool==='pan'||e.button===1){drag={sx,sy,ox:S.view.ox,oy:S.view.oy};cv.setPointerCapture(e.pointerId);return;}
+  if(!S.tin)return;
+  if(S.tool==='break'){
+    const i=nearPoint(sx,sy,12);
+    if(i<0){msg('No point within reach — zoom in',true);return;}
+    const id=S.act[i].id;
+    if(S.draft[S.draft.length-1]!==id)S.draft.push(id);
+    msg(S.draft.length+' point(s) picked — Enter to finish, Esc to abandon');draw();
+  }
+  else if(S.tool==='swap'){
+    const hit=nearEdge(sx,sy,9);
+    if(!hit){msg('No triangle edge within reach',true);return;}
+    const [a,b,k]=hit;
+    if(S.tin.locked.has(k)){msg('That edge is held by a breakline — turn the breakline off first',true);return;}
+    if(S.swapKeys.has(k)){                       // clicking your own swap puts it back
+      const i=S.swaps.findIndex(s=>!s.stale&&ekey(S.idx.get(s.r),S.idx.get(s.l))===k);
+      if(i>=0){const s=S.swaps[i];S.swaps.splice(i,1);rebuild();
+        msg('Swap undone — back to '+s.p+'–'+s.q);return;}
+    }
+    const o=S.tin._opp(a,b);
+    if(!o){msg('Edge is on the boundary, there is only one triangle to swap',true);return;}
+    if(!S.tin._convex(a,o.r,b,o.l)){msg('Those two triangles do not make a convex shape — that swap would fold the surface over itself',true);return;}
+    S.swaps.push({p:S.act[a].id,q:S.act[b].id,r:S.act[o.r].id,l:S.act[o.l].id,stale:false});
+    rebuild();
+    msg('Swapped '+S.act[a].id+'–'+S.act[b].id+' to '+S.act[o.r].id+'–'+S.act[o.l].id);
+  }
+  else if(S.tool==='off'){
+    const i=nearRaw(sx,sy,10);
+    if(i<0){msg('No point within reach',true);return;}
+    S.raw[i].use=!S.raw[i].use;
+    msg('Point '+S.raw[i].id+(S.raw[i].use?' back in the surface':' left out of the surface'));
+    rebuild();
+  }
+});
+cv.addEventListener('pointermove',e=>{
+  const r=cv.getBoundingClientRect(),sx=e.clientX-r.left,sy=e.clientY-r.top;
+  if(drag){
+    S.view.ox=drag.ox-(sx-drag.sx)/S.view.s;
+    S.view.oy=drag.oy+(sy-drag.sy)/S.view.s;
+    draw();return;
+  }
+  const lx=invX(sx),ly=invY(sy);
+  $('rE').textContent=fmt(lx+S.org.e,3);$('rN').textContent=fmt(ly+S.org.n,3);
+  const i=S.act.length?nearPoint(sx,sy,14):-1;
+  if(i>=0){$('rZ').textContent=S.act[i].z.toFixed(3);$('rP').textContent=S.act[i].id+' · '+S.act[i].code;}
+  else{$('rZ').textContent='—';$('rP').textContent='—';}
+});
+addEventListener('pointerup',()=>{drag=null;});
+cv.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const r=cv.getBoundingClientRect(),sx=e.clientX-r.left,sy=e.clientY-r.top;
+  const wx=invX(sx),wy=invY(sy);
+  S.view.s*=e.deltaY<0?1.15:1/1.15;
+  S.view.ox=wx-sx/S.view.s;S.view.oy=wy+sy/S.view.s;
+  draw();
+},{passive:false});
+addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return;
+  if(e.key==='Enter'&&S.tool==='break')finishDraft();
+  if(e.key==='Escape'){S.draft=[];draw();msg('Breakline abandoned');}
+  if(e.key==='z'&&(e.ctrlKey||e.metaKey))undo();
+});
+function undo(){
+  if(S.draft.length){S.draft.pop();draw();return;}
+  if(S.swaps.length){S.swaps.pop();rebuild();msg('Swap undone');return;}
+  if(S.brk.length){S.brk.pop();rebuild();msg('Breakline removed');return;}
+  msg('Nothing left to undo');
+}
+
+/* ══════════════ export ══════════════ */
+function save(name,text,mime){
+  const b=new Blob([text],{type:mime||'text/plain'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(b);a.download=name;a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+function usedFaces(){
+  const faces=[],used=new Set();
+  S.tin.tris.forEach((t,i)=>{if(S.keep.has(i)){faces.push(t);t.forEach(v=>used.add(v));}});
+  return {faces,used};
+}
+function exportLandXML(){
+  if(!S.tin)return;
+  const {faces,used}=usedFaces();
+  const nm=$('sname').value.trim()||'EG-FIELD';
+  const num=new Map();let k=1;
+  const P=[];
+  for(let i=0;i<S.act.length;i++){
+    if(!used.has(i))continue;
+    num.set(i,k++);
+    const p=S.act[i];
+    P.push('<P id="'+num.get(i)+'">'+p.n.toFixed(4)+' '+p.e.toFixed(4)+' '+p.z.toFixed(4)+'</P>');
+  }
+  const F=faces.map(t=>'<F>'+num.get(t[0])+' '+num.get(t[1])+' '+num.get(t[2])+'</F>');
+  const B=S.brk.filter(b=>b.on).map(b=>{
+    const c=b.ids.map(id=>{const i=S.idx.get(id);if(i===undefined)return null;const p=S.act[i];
+      return p.n.toFixed(4)+' '+p.e.toFixed(4)+' '+p.z.toFixed(4);}).filter(Boolean);
+    return c.length<2?'':'<Breakline name="'+b.name+'" brkType="standard"><PntList3D>'+c.join(' ')+'</PntList3D></Breakline>';
+  }).filter(Boolean);
+  const d=new Date().toISOString();
+  const xml='<?xml version="1.0" encoding="UTF-8"?>\n'+
+  '<LandXML xmlns="http://www.landxml.org/schema/LandXML-1.2" version="1.2" date="'+d.slice(0,10)+'" time="'+d.slice(11,19)+'">\n'+
+  '<Units><Metric linearUnit="meter" areaUnit="squareMeter" volumeUnit="cubicMeter" temperatureUnit="celsius" pressureUnit="milliBars" angularUnit="decimal degrees" directionUnit="decimal degrees"/></Units>\n'+
+  '<Application name="TIN Solver" version="1.0" desc="Field-built surface, reviewed by the surveyor"/>\n'+
+  '<Surfaces>\n<Surface name="'+nm+'" desc="'+S.file.replace(/"/g,'')+'">\n'+
+  (B.length?'<SourceData>\n<Breaklines>\n'+B.join('\n')+'\n</Breaklines>\n</SourceData>\n':'')+
+  '<Definition surfType="TIN">\n<Pnts>\n'+P.join('\n')+'\n</Pnts>\n<Faces>\n'+F.join('\n')+'\n</Faces>\n'+
+  '</Definition>\n</Surface>\n</Surfaces>\n</LandXML>\n';
+  save(nm+'.xml',xml,'application/xml');
+  msg('LandXML written — '+P.length+' points, '+F.length+' faces');
+}
+function exportDXF(){
+  if(!S.tin)return;
+  const {faces}=usedFaces();
+  const o=[];const g=(c,v)=>{o.push(c,v)};
+  g(0,'SECTION');g(2,'ENTITIES');
+  for(const t of faces){
+    g(0,'3DFACE');g(8,'TIN-FACES');
+    [0,1,2,2].forEach((v,j)=>{
+      const p=S.act[t[v]];
+      g(10+j,p.e.toFixed(4));g(20+j,p.n.toFixed(4));g(30+j,p.z.toFixed(4));
+    });
+  }
+  for(const p of S.act){
+    g(0,'POINT');g(8,'PTS-'+p.code.replace(/[^A-Z0-9_-]/gi,'_'));
+    g(10,p.e.toFixed(4));g(20,p.n.toFixed(4));g(30,p.z.toFixed(4));
+  }
+  for(const b of S.brk){
+    if(!b.on)continue;
+    const pts=b.ids.map(id=>S.idx.get(id)).filter(i=>i!==undefined);
+    if(pts.length<2)continue;
+    g(0,'POLYLINE');g(8,'BRK-'+b.name.replace(/[^A-Z0-9_-]/gi,'_'));g(66,'1');g(70,'8');
+    g(10,'0');g(20,'0');g(30,'0');
+    for(const i of pts){
+      const p=S.act[i];
+      g(0,'VERTEX');g(8,'BRK');g(70,'32');
+      g(10,p.e.toFixed(4));g(20,p.n.toFixed(4));g(30,p.z.toFixed(4));
+    }
+    g(0,'SEQEND');
+  }
+  g(0,'ENDSEC');g(0,'EOF');
+  let s='';for(let i=0;i<o.length;i+=2)s+=String(o[i]).padStart(3,' ')+'\n'+o[i+1]+'\n';
+  save(($('sname').value.trim()||'EG-FIELD')+'.dxf',s,'application/dxf');
+  msg('DXF written — '+faces.length+' 3D faces');
+}
+function exportContours(){
+  if(!S.tin)return;
+  makeContours(true);
+  if(!S.contours.length){msg('No contours at this interval — check the elevation range',true);return;}
+  const iv=parseFloat($('cint').value)||0.5;
+  const dec=(iv*5)%1===0?0:1;                        // label to the precision the index contour needs
+  let ew=0,en=0;for(const p of S.loc){ew=Math.max(ew,Math.abs(p.x));en=Math.max(en,Math.abs(p.y));}
+  const th=Math.max(0.15,Math.max(ew,en)*2/300);      // text sized to the job, not the interval
+  const o=[],g=(c,v)=>o.push(c,v);
+  g(0,'SECTION');g(2,'ENTITIES');
+  let n=0;
+  for(const c of S.contours){
+    const lay=(c.major?'CONT-INDEX-':'CONT-MINOR-')+iv.toFixed(1).replace('.','P');
+    for(const L of c.lines){
+      if(L.length<2)continue;n++;
+      g(0,'POLYLINE');g(8,lay);g(66,'1');g(70,'8');
+      g(10,'0');g(20,'0');g(30,c.z.toFixed(4));
+      for(const p of L){
+        g(0,'VERTEX');g(8,lay);g(70,'32');
+        g(10,(p.x+S.org.e).toFixed(4));g(20,(p.y+S.org.n).toFixed(4));g(30,c.z.toFixed(4));
+      }
+      g(0,'SEQEND');g(8,lay);
+    }
+    if(c.major&&c.lines.length){                     // one elevation label per index contour
+      const L=c.lines.reduce((a,b)=>b.length>a.length?b:a);
+      const p=L[Math.floor(L.length/2)],q=L[Math.min(L.length-1,Math.floor(L.length/2)+1)];
+      const ang=Math.atan2(q.y-p.y,q.x-p.x)*180/Math.PI;
+      g(0,'TEXT');g(8,'CONT-TEXT');
+      g(10,(p.x+S.org.e).toFixed(4));g(20,(p.y+S.org.n).toFixed(4));g(30,c.z.toFixed(4));
+      g(40,th.toFixed(3));g(1,c.z.toFixed(dec));
+      g(50,(ang>90||ang<-90?ang+180:ang).toFixed(2));g(72,'1');g(73,'2');
+      g(11,(p.x+S.org.e).toFixed(4));g(21,(p.y+S.org.n).toFixed(4));g(31,c.z.toFixed(4));
+    }
+  }
+  g(0,'ENDSEC');g(0,'EOF');
+  let s='';for(let i=0;i<o.length;i+=2)s+=String(o[i]).padStart(3,' ')+'\n'+o[i+1]+'\n';
+  save(($('sname').value.trim()||'EG-FIELD')+'-CONT-'+iv+'m.dxf',s,'application/dxf');
+  msg(n+' contour polylines written at '+iv+' m, index every '+(iv*5).toFixed(1)+' m');
+  if(!$('lCon').checked)S.contours=[];
+}
+function exportProject(){
+  const j={v:2,file:S.file,fmt:$('fmt').value,sname:$('sname').value,
+    maxEdgePct:S.maxEdgePct,cint:$('cint').value,ztol:$('ztol').value,
+    raw:S.raw,brk:S.brk,swaps:S.swaps};
+  save((S.file.replace(/\.[^.]+$/,'')||'tin')+'-work.json',JSON.stringify(j),'application/json');
+  msg('Working file saved — reopen it here to carry on');
+}
+function importProject(t){
+  const j=JSON.parse(t);
+  S.raw=j.raw;S.brk=j.brk||[];S.file=j.file||'';
+  S.swaps=(j.swaps||[]).filter(s=>s&&s.p!==undefined);   // v1 swaps had no old diagonal, drop them
+  $('sname').value=j.sname||'EG-FIELD';$('cint').value=j.cint||0.5;$('ztol').value=j.ztol||0.5;
+  S.maxEdgePct=j.maxEdgePct??100;$('maxEdge').value=S.maxEdgePct;
+  $('fname').textContent=S.file+' · '+S.raw.length+' points';
+  $('drop').classList.add('hide');
+  rebuild();zoomAll();msg('Working file reopened');
+}
+
+/* ══════════════ sample ══════════════ */
+function sample(){
+  // A 240 m road in shallow cut, shot as strings: centreline, edge of kerb,
+  // kerb invert, batter toe, top of batter — left and right coded separately.
+  const L=[];let id=1000;
+  const E0=512340.000,N0=8712500.000;
+  const ground=(e,n)=>1204.500-0.020*(e-E0)+0.008*(n-N0)+0.60*Math.sin((e-E0)/60);
+  const cl=ch=>({e:E0+ch,n:N0+18*Math.sin(ch/110)});
+  const put=(e,n,z,c)=>L.push([id++,n.toFixed(3),e.toFixed(3),z.toFixed(3),c]);
+  for(let ch=0;ch<=240;ch+=8){
+    const c=cl(ch),gz=ground(c.e,c.n);
+    const zCL=gz-0.45, zEK=zCL-0.105, zIL=zEK-0.150;
+    put(c.e,c.n,zCL,'CL');
+    for(const s of [-1,1]){
+      const sd=s<0?'L':'R';
+      put(c.e,c.n+s*3.5,zEK,'EK'+sd);
+      put(c.e,c.n+s*4.0,zIL,'IL'+sd);
+      put(c.e,c.n+s*5.0,zIL,'TOE'+sd);
+      let off=5.0;                       // daylight the 1:2 batter onto the ground
+      for(let k=0;k<3;k++){const g=ground(c.e,c.n+s*off);off=5.0+2*Math.max(0,g-zIL);}
+      put(c.e,c.n+s*off,ground(c.e,c.n+s*off),'TOP'+sd);
+    }
+  }
+  for(let i=0;i<170;i++){                // random ground shots clear of the corridor
+    const e=E0-15+Math.random()*270, n=N0-60+Math.random()*130;
+    if(Math.abs(n-cl(e-E0).n)<16)continue;
+    put(e,n,ground(e,n)+(Math.random()-0.5)*0.06,'SPOT');
+  }
+  const blunder=L.findIndex(r=>r[4]==='TOPL'&&r[0]>1050);
+  L[blunder][3]=(parseFloat(L[blunder][3])+1.85).toFixed(3);  // rod height left wrong
+  return L.map(r=>r.join(',')).join('\n');
+}
+
+/* ══════════════ wiring ══════════════ */
+$('btnOpen').onclick=()=>$('file').click();
+$('file').onchange=e=>{const f=e.target.files[0];if(!f)return;
+  const r=new FileReader();r.onload=()=>loadPoints(r.result,f.name);r.readAsText(f);};
+$('btnSample').onclick=$('btnSample2').onclick=()=>{$('fmt').value='pnezd';$('sep').value=',';loadPoints(sample(),'SAMPLE-ROAD.txt');};
+$('btnLoadPrj').onclick=()=>$('prjfile').click();
+$('prjfile').onchange=e=>{const f=e.target.files[0];if(!f)return;
+  const r=new FileReader();r.onload=()=>{try{importProject(r.result)}catch(x){msg('That file is not a TIN Solver working file',true)}};r.readAsText(f);};
+document.querySelectorAll('.tool').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.tool').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on');S.tool=b.dataset.tool;S.draft=[];draw();
+  cv.style.cursor=S.tool==='pan'?'grab':'crosshair';
+  msg({pan:'Drag to pan, wheel to zoom',
+       break:'Click points in order, Enter to finish',
+       swap:'Click a triangle edge to swap the diagonal — click a swapped edge again to put it back',
+       off:'Click a point to leave it out of the surface, click again to bring it back'}[S.tool]);
+});
+$('btnZoomAll').onclick=zoomAll;
+$('btnUndo').onclick=undo;
+$('maxEdge').oninput=e=>{S.maxEdgePct=+e.target.value;trim();findHull();makeContours();draw();stats();};
+$('cint').onchange=()=>{$('ivLbl').textContent=$('cint').value;makeContours();draw();};
+$('ztol').oninput=()=>{findFlags();draw();tables();};
+$('pfilter').oninput=tables;
+['lTri','lBrk','lPts','lLab','lFlag'].forEach(k=>$(k).onchange=draw);
+$('lCon').onchange=()=>{makeContours();draw();};
+$('cSmooth').onchange=()=>{makeContours();draw();};
+$('exLX').onclick=exportLandXML;$('exDXF').onclick=exportDXF;
+$('exCON').onclick=exportContours;$('exPRJ').onclick=exportProject;
+const dz=$('drop');
+['dragenter','dragover'].forEach(t=>dz.addEventListener(t,e=>{e.preventDefault();dz.classList.add('over')}));
+['dragleave','drop'].forEach(t=>dz.addEventListener(t,e=>{e.preventDefault();dz.classList.remove('over')}));
+document.body.addEventListener('dragover',e=>e.preventDefault());
+document.body.addEventListener('drop',e=>{
+  e.preventDefault();const f=e.dataTransfer.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=()=>{f.name.endsWith('.json')?importProject(r.result):loadPoints(r.result,f.name)};
+  r.readAsText(f);
+});
+new ResizeObserver(resize).observe(cv.parentElement);
+resize();
+msg('Open a points file, or load the sample to see how it works');
+</script>
+</body>
+</html>
