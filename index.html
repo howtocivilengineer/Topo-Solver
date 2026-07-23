@@ -118,6 +118,9 @@ canvas{display:block;width:100%;height:100%;cursor:crosshair;touch-action:none}
   .panel,.panel.right{width:100%;border:0;border-bottom:1px solid #000}
   .stage{order:-1;height:62vh;flex:0 0 auto}
 }
+.langsel{background:#141a22;color:#cfd8e3;border:1px solid #2b3644;border-radius:6px;
+  padding:4px 8px;font:inherit;font-size:12px;margin-right:8px;cursor:pointer}
+.langsel:hover{border-color:#3d7ab8}
 </style>
 </head>
 <body>
@@ -126,6 +129,7 @@ canvas{display:block;width:100%;height:100%;cursor:crosshair;touch-action:none}
   <h1>TIN Solver</h1>
   <span class="sub">build and review the surface from your own points, then hand it over as LandXML</span>
   <span class="spacer"></span>
+  <select id="lang" class="langsel" title="Language"><option value="en">English</option><option value="pt">Português (PT)</option><option value="fr">Français</option><option value="es">Español</option></select>
   <span class="tag" id="fname">no file loaded</span>
 </header>
 
@@ -185,6 +189,8 @@ canvas{display:block;width:100%;height:100%;cursor:crosshair;touch-action:none}
       <button class="tool" data-tool="break">Draw breakline</button>
       <button class="tool" data-tool="swap">Swap edge</button>
       <button class="tool" data-tool="off">Toggle point</button>
+      <button class="tool" data-tool="delbrk">Remove breakline</button>
+      <button class="tool" data-tool="delpt">Remove point</button>
       <span class="sep"></span>
       <button id="btnZoomAll">Zoom all</button>
       <button id="btnUndo">Undo edit</button>
@@ -273,7 +279,7 @@ canvas{display:block;width:100%;height:100%;cursor:crosshair;touch-action:none}
       <label class="f">Surface name</label>
       <input type="text" id="sname" value="EG-FIELD">
       <button class="primary wide" id="exLX">Export LandXML surface</button>
-      <button class="wide" id="exDXF">Export DXF — points, faces, breaklines</button>
+      <button class="wide" id="exDXF">Export DXF — points, levels, codes, triangles, breaklines</button>
       <button class="wide" id="exCON">Export DXF — contours at <span id="ivLbl">0.5</span> m</button>
       <button class="wide" id="exPRJ">Save working file (.json)</button>
       <button class="wide" id="btnLoadPrj">Reopen a working file</button>
@@ -420,7 +426,182 @@ const S={
 const $=id=>document.getElementById(id);
 const cv=$('cv'),ctx=cv.getContext('2d');
 const fmt=(v,d=3)=>v==null||!isFinite(v)?'—':v.toFixed(d);
-const msg=(t,warn)=>{const r=$('rMsg');r.textContent=t;r.className=warn?'warn':'msg';};
+/* ══════════════ languages ══════════════
+   Each entry: English → [pt-PT, fr, es]. Survey vocabulary kept local:
+   breakline = linha de quebra / ligne de rupture / línea de rotura.        */
+const TR={
+"build and review the surface from your own points, then hand it over as LandXML":["construa e reveja a superfície a partir dos seus pontos, depois entregue-a em LandXML","construisez et vérifiez la surface à partir de vos points, puis livrez-la en LandXML","construya y revise la superficie a partir de sus puntos, luego entréguela en LandXML"],
+"no file loaded":["nenhum ficheiro carregado","aucun fichier chargé","ningún archivo cargado"],
+"1 · Points file":["1 · Ficheiro de pontos","1 · Fichier de points","1 · Archivo de puntos"],
+"2 · Codes":["2 · Códigos","2 · Codes","2 · Códigos"],
+"3 · Breaklines":["3 · Linhas de quebra","3 · Lignes de rupture","3 · Líneas de rotura"],
+"4 · Review":["4 · Revisão","4 · Vérification","4 · Revisión"],
+"5 · Hand over":["5 · Entrega","5 · Livraison","5 · Entrega"],
+"Open .txt / .csv":["Abrir .txt / .csv","Ouvrir .txt / .csv","Abrir .txt / .csv"],
+"Load sample":["Carregar exemplo","Charger l'exemple","Cargar ejemplo"],
+"Column order":["Ordem das colunas","Ordre des colonnes","Orden de las columnas"],
+"P, N, E, Z, D — point, north, east, elev, code":["P, N, E, Z, D — ponto, norte, este, cota, código","P, N, E, Z, D — point, nord, est, altitude, code","P, N, E, Z, D — punto, norte, este, cota, código"],
+"P, E, N, Z, D — point, east, north, elev, code":["P, E, N, Z, D — ponto, este, norte, cota, código","P, E, N, Z, D — point, est, nord, altitude, code","P, E, N, Z, D — punto, este, norte, cota, código"],
+"P, X, Y, Z, D (x=east, y=north)":["P, X, Y, Z, D (x=este, y=norte)","P, X, Y, Z, D (x=est, y=nord)","P, X, Y, Z, D (x=este, y=norte)"],
+"Separator":["Separador","Séparateur","Separador"],
+"Detect automatically":["Detetar automaticamente","Détecter automatiquement","Detectar automáticamente"],
+"Comma":["Vírgula","Virgule","Coma"],
+"Space":["Espaço","Espace","Espacio"],
+"Tab":["Tabulação","Tabulation","Tabulación"],
+"Semicolon":["Ponto e vírgula","Point-virgule","Punto y coma"],
+"Lines that don't parse are skipped and listed here.":["As linhas não reconhecidas são ignoradas e listadas aqui.","Les lignes non reconnues sont ignorées et listées ici.","Las líneas no reconocidas se omiten y se listan aquí."],
+"Chain turns every point sharing a code into one breakline, in file order — that's how the points were shot, so that's the order the string was walked.":["Encadear une todos os pontos com o mesmo código numa linha de quebra, pela ordem do ficheiro — foi assim que os pontos foram levantados, logo é a ordem em que a linha foi percorrida.","Chaîner relie tous les points partageant un code en une ligne de rupture, dans l'ordre du fichier — c'est l'ordre dans lequel les points ont été levés, donc l'ordre dans lequel la ligne a été parcourue.","Encadenar une todos los puntos con el mismo código en una línea de rotura, en el orden del archivo — así se tomaron los puntos, así que ese es el orden en que se recorrió la línea."],
+"Points":["Pontos","Points","Puntos"],
+"Filter by code or number":["Filtrar por código ou número","Filtrer par code ou numéro","Filtrar por código o número"],
+"e.g. EK  or  1024":["ex.: EK  ou  1024","p. ex. EK  ou  1024","p. ej. EK  o  1024"],
+"Pt":["Pt","Pt","Pt"],
+"Code":["Código","Code","Código"],
+"Elev":["Cota","Altitude","Cota"],
+"Use":["Usar","Utiliser","Usar"],
+"Name":["Nome","Nom","Nombre"],
+"Pts":["Pts","Pts","Pts"],
+"On":["Ativo","Actif","Activo"],
+"Off by":["Desvio","Écart","Desvío"],
+"Click a row to zoom to it. Untick to leave a point out of the surface — the point stays in the file, it just stops pulling the triangles around.":["Clique numa linha para a ampliar. Desmarque para deixar um ponto fora da superfície — o ponto permanece no ficheiro, apenas deixa de influenciar os triângulos.","Cliquez sur une ligne pour zoomer dessus. Décochez pour exclure un point de la surface — le point reste dans le fichier, il cesse simplement d'influencer les triangles.","Haga clic en una fila para ampliarla. Desmarque para dejar un punto fuera de la superficie — el punto permanece en el archivo, solo deja de influir en los triángulos."],
+"Pan":["Deslocar","Déplacer","Desplazar"],
+"Draw breakline":["Desenhar linha de quebra","Tracer une ligne de rupture","Dibujar línea de rotura"],
+"Swap edge":["Trocar aresta","Permuter l'arête","Intercambiar arista"],
+"Toggle point":["Alternar ponto","Activer/exclure un point","Alternar punto"],
+"Remove breakline":["Remover linha de quebra","Supprimer une ligne de rupture","Eliminar línea de rotura"],
+"Remove point":["Remover ponto","Supprimer un point","Eliminar punto"],
+"Zoom all":["Ver tudo","Tout afficher","Ver todo"],
+"Undo edit":["Anular edição","Annuler la modification","Deshacer edición"],
+"Triangles":["Triângulos","Triangles","Triángulos"],
+"Breaklines":["Linhas de quebra","Lignes de rupture","Líneas de rotura"],
+"Labels":["Etiquetas","Étiquettes","Etiquetas"],
+"Contours":["Curvas de nível","Courbes de niveau","Curvas de nivel"],
+"Flags":["Alertas","Alertes","Avisos"],
+"Drop a points file here":["Largue aqui um ficheiro de pontos","Déposez ici un fichier de points","Suelte aquí un archivo de puntos"],
+"Load a sample road survey instead":["Ou carregue um levantamento de estrada de exemplo","Ou chargez un levé de route d'exemple","O cargue un levantamiento de carretera de ejemplo"],
+"Near":["Próx.","Proche","Cerca"],
+"Tris":["Triâng.","Tri.","Triáng."],
+"Edits":["Edições","Modifs","Ediciones"],
+"Points used":["Pontos usados","Points utilisés","Puntos usados"],
+"Breakline segs held":["Segmentos de quebra fixados","Segments de rupture tenus","Segmentos de rotura fijados"],
+"Elev range":["Amplitude de cotas","Plage d'altitude","Rango de cotas"],
+"Plan area":["Área em planta","Surface en plan","Área en planta"],
+"Surface area":["Área da superfície","Surface réelle","Área de la superficie"],
+"Surface":["Superfície","Surface","Superficie"],
+"Draw breakline: click points in order, then press Enter to close the string, Esc to abandon it.":["Desenhar linha de quebra: clique nos pontos por ordem, depois prima Enter para fechar a linha, Esc para abandonar.","Tracer une ligne de rupture : cliquez les points dans l'ordre, puis Entrée pour fermer la ligne, Échap pour abandonner.","Dibujar línea de rotura: haga clic en los puntos en orden, luego pulse Intro para cerrar la línea, Esc para abandonar."],
+"Trim triangles longer than":["Recortar triângulos maiores que","Éliminer les triangles plus longs que","Recortar triángulos mayores que"],
+"Cuts the long thin triangles that reach across the outside of the job. Slide left until the boundary matches where you actually surveyed.":["Corta os triângulos longos e finos que se estendem para fora do trabalho. Arraste para a esquerda até o limite coincidir com a zona efetivamente levantada.","Supprime les triangles longs et fins qui débordent du chantier. Glissez vers la gauche jusqu'à ce que la limite corresponde à la zone réellement levée.","Corta los triángulos largos y finos que se extienden fuera del trabajo. Deslice a la izquierda hasta que el límite coincida con la zona realmente levantada."],
+"Contour interval":["Intervalo de curvas de nível","Équidistance des courbes","Equidistancia de curvas"],
+"0.1 m — detail / flat site":["0,1 m — detalhe / terreno plano","0,1 m — détail / terrain plat","0,1 m — detalle / terreno llano"],
+"2 m — steep ground":["2 m — terreno inclinado","2 m — terrain pentu","2 m — terreno inclinado"],
+"Every 5th contour draws heavy and exports to its own layer, the way an index contour should.":["Cada 5.ª curva é desenhada a cheio e exportada para a sua própria camada, como deve ser uma curva mestra.","Chaque 5e courbe est tracée en gras et exportée sur son propre calque, comme il se doit pour une courbe maîtresse.","Cada 5.ª curva se dibuja gruesa y se exporta a su propia capa, como corresponde a una curva maestra."],
+"Smooth contours":["Suavizar curvas de nível","Lisser les courbes","Suavizar curvas"],
+"Rounds the triangle-edge kinks so the drawn and exported contours read like a real survey plan. Turn off to see the raw TIN facets.":["Arredonda os vértices das arestas dos triângulos para que as curvas desenhadas e exportadas pareçam uma planta topográfica real. Desligue para ver as facetas do TIN em bruto.","Arrondit les cassures aux arêtes des triangles pour que les courbes tracées et exportées ressemblent à un vrai plan topographique. Désactivez pour voir les facettes brutes du TIN.","Redondea los quiebres en las aristas de los triángulos para que las curvas dibujadas y exportadas parezcan un plano topográfico real. Desactive para ver las facetas del TIN en bruto."],
+"Flag points more than this off their neighbours (m)":["Assinalar pontos que se afastem mais do que isto dos vizinhos (m)","Signaler les points s'écartant de plus de ceci de leurs voisins (m)","Señalar puntos que se aparten más de esto de sus vecinos (m)"],
+"A point sitting well above or below the ground around it is usually a rod height left wrong or a mis-typed elevation. Check it against the field notes before you send the surface on.":["Um ponto muito acima ou abaixo do terreno em redor resulta normalmente de uma altura de baliza errada ou de uma cota mal introduzida. Verifique-o com as notas de campo antes de entregar a superfície.","Un point nettement au-dessus ou au-dessous du terrain environnant provient généralement d'une hauteur de canne erronée ou d'une altitude mal saisie. Vérifiez-le avec le carnet de terrain avant de livrer la surface.","Un punto muy por encima o por debajo del terreno circundante suele deberse a una altura de jalón incorrecta o a una cota mal escrita. Compruébelo con las notas de campo antes de entregar la superficie."],
+"Surface name":["Nome da superfície","Nom de la surface","Nombre de la superficie"],
+"Export LandXML surface":["Exportar superfície LandXML","Exporter la surface LandXML","Exportar superficie LandXML"],
+"Export DXF — points, levels, codes, triangles, breaklines":["Exportar DXF — pontos, cotas, códigos, triângulos, linhas de quebra","Exporter DXF — points, altitudes, codes, triangles, lignes de rupture","Exportar DXF — puntos, cotas, códigos, triángulos, líneas de rotura"],
+"Export DXF — contours at":["Exportar DXF — curvas de nível a","Exporter DXF — courbes à","Exportar DXF — curvas a"],
+"Save working file (.json)":["Guardar ficheiro de trabalho (.json)","Enregistrer le fichier de travail (.json)","Guardar archivo de trabajo (.json)"],
+"Reopen a working file":["Reabrir um ficheiro de trabalho","Rouvrir un fichier de travail","Reabrir un archivo de trabajo"],
+"The LandXML carries the exact triangles on screen — every swap, every breakline, every point you left out. Imported into Civil 3D it comes in as your surface, not a fresh triangulation of your points.":["O LandXML transporta exatamente os triângulos do ecrã — cada troca, cada linha de quebra, cada ponto excluído. Importado no Civil 3D entra como a sua superfície, não como uma nova triangulação dos pontos.","Le LandXML transporte exactement les triangles à l'écran — chaque permutation, chaque ligne de rupture, chaque point exclu. Importé dans Civil 3D, il arrive comme votre surface, et non comme une nouvelle triangulation de vos points.","El LandXML transporta exactamente los triángulos en pantalla — cada intercambio, cada línea de rotura, cada punto excluido. Importado en Civil 3D entra como su superficie, no como una nueva triangulación de sus puntos."],
+/* ── messages ── */
+"Open a points file, or load the sample to see how it works":["Abra um ficheiro de pontos, ou carregue o exemplo para ver como funciona","Ouvrez un fichier de points, ou chargez l'exemple pour voir le fonctionnement","Abra un archivo de puntos, o cargue el ejemplo para ver cómo funciona"],
+"Drag to pan, wheel to zoom":["Arraste para deslocar, roda para ampliar","Glissez pour déplacer, molette pour zoomer","Arrastre para desplazar, rueda para ampliar"],
+"Click points in order, Enter to finish":["Clique nos pontos por ordem, Enter para terminar","Cliquez les points dans l'ordre, Entrée pour terminer","Haga clic en los puntos en orden, Intro para terminar"],
+"Click a triangle edge to swap the diagonal — click a swapped edge again to put it back":["Clique numa aresta de triângulo para trocar a diagonal — clique novamente numa aresta trocada para a repor","Cliquez sur une arête de triangle pour permuter la diagonale — recliquez sur une arête permutée pour la rétablir","Haga clic en una arista para intercambiar la diagonal — vuelva a hacer clic en una arista intercambiada para restaurarla"],
+"Click a point to leave it out of the surface, click again to bring it back":["Clique num ponto para o deixar fora da superfície, clique novamente para o repor","Cliquez sur un point pour l'exclure de la surface, recliquez pour le rétablir","Haga clic en un punto para excluirlo de la superficie, vuelva a hacer clic para restaurarlo"],
+"Click a breakline to delete it — the points stay, only the string goes":["Clique numa linha de quebra para a apagar — os pontos ficam, só a linha desaparece","Cliquez sur une ligne de rupture pour la supprimer — les points restent, seule la ligne disparaît","Haga clic en una línea de rotura para borrarla — los puntos quedan, solo desaparece la línea"],
+"Click a point to delete it from the file — Undo puts it back":["Clique num ponto para o apagar do ficheiro — Anular repõe-no","Cliquez sur un point pour le supprimer du fichier — Annuler le rétablit","Haga clic en un punto para borrarlo del archivo — Deshacer lo restaura"],
+"Edit undone":["Edição anulada","Modification annulée","Edición deshecha"],
+"No point within reach":["Nenhum ponto ao alcance","Aucun point à proximité","Ningún punto al alcance"],
+"No point within reach — zoom in":["Nenhum ponto ao alcance — amplie","Aucun point à proximité — zoomez","Ningún punto al alcance — amplíe"],
+"No triangle edge within reach":["Nenhuma aresta de triângulo ao alcance","Aucune arête de triangle à proximité","Ninguna arista de triángulo al alcance"],
+"No breakline within reach":["Nenhuma linha de quebra ao alcance","Aucune ligne de rupture à proximité","Ninguna línea de rotura al alcance"],
+"That edge is held by a breakline — turn the breakline off first":["Essa aresta está fixada por uma linha de quebra — desligue primeiro a linha de quebra","Cette arête est tenue par une ligne de rupture — désactivez d'abord la ligne de rupture","Esa arista está fijada por una línea de rotura — desactive primero la línea de rotura"],
+"Edge is on the boundary, there is only one triangle to swap":["A aresta está no limite, só existe um triângulo para trocar","L'arête est sur la limite, il n'y a qu'un seul triangle à permuter","La arista está en el límite, solo hay un triángulo para intercambiar"],
+"Those two triangles do not make a convex shape — that swap would fold the surface over itself":["Esses dois triângulos não formam uma forma convexa — essa troca dobraria a superfície sobre si mesma","Ces deux triangles ne forment pas une figure convexe — cette permutation replierait la surface sur elle-même","Esos dos triángulos no forman una figura convexa — ese intercambio plegaría la superficie sobre sí misma"],
+"Swap undone":["Troca anulada","Permutation annulée","Intercambio deshecho"],
+"Swap undone — back to ":["Troca anulada — de volta a ","Permutation annulée — retour à ","Intercambio deshecho — vuelta a "],
+"Swapped ":["Trocado ","Permuté ","Intercambiado "],
+"Point ":["Ponto ","Point ","Punto "],
+" back in the surface":[" de volta à superfície"," de nouveau dans la surface"," de vuelta en la superficie"],
+" left out of the surface":[" fora da superfície"," exclu de la surface"," fuera de la superficie"],
+" deleted from the file":[" apagado do ficheiro"," supprimé du fichier"," borrado del archivo"],
+"Breakline ":["Linha de quebra ","Ligne de rupture ","Línea de rotura "],
+" removed":[" removida"," supprimée"," eliminada"],
+"Breakline abandoned":["Linha de quebra abandonada","Ligne de rupture abandonnée","Línea de rotura abandonada"],
+"Breakline removed":["Linha de quebra removida","Ligne de rupture supprimée","Línea de rotura eliminada"],
+"Breakline of ":["Linha de quebra de ","Ligne de rupture de ","Línea de rotura de "],
+" points added":[" pontos adicionada"," points ajoutée"," puntos añadida"],
+"Chained ":["Encadeados ","Chaînés ","Encadenados "],
+" points on code ":[" pontos no código "," points sur le code "," puntos en el código "],
+"Code ":["Código ","Code ","Código "],
+" has fewer than two points in use":[" tem menos de dois pontos em uso"," a moins de deux points utilisés"," tiene menos de dos puntos en uso"],
+" point(s) picked — Enter to finish, Esc to abandon":[" ponto(s) selecionado(s) — Enter para terminar, Esc para abandonar"," point(s) sélectionné(s) — Entrée pour terminer, Échap pour abandonner"," punto(s) seleccionado(s) — Intro para terminar, Esc para abandonar"],
+"Nothing left to undo":["Nada para anular","Plus rien à annuler","Nada que deshacer"],
+"No points read. Check the column order and separator above.":["Nenhum ponto lido. Verifique a ordem das colunas e o separador acima.","Aucun point lu. Vérifiez l'ordre des colonnes et le séparateur ci-dessus.","Ningún punto leído. Compruebe el orden de las columnas y el separador arriba."],
+" points read, ":[" pontos lidos, "," points lus, "," puntos leídos, "],
+" points":[" pontos"," points"," puntos"],
+" line(s) skipped — first was: ":[" linha(s) ignorada(s) — a primeira foi: "," ligne(s) ignorée(s) — la première était : "," línea(s) omitida(s) — la primera fue: "],
+" codes.":[" códigos."," codes."," códigos."],
+" triangles in ":[" triângulos em "," triangles en "," triángulos en "],
+" breakline segment(s) crossed another and could not be held":[" segmento(s) de quebra cruzaram outro e não puderam ser fixados"," segment(s) de rupture en croisaient un autre et n'ont pas pu être tenus"," segmento(s) de rotura cruzaron otro y no pudieron fijarse"],
+"That interval gives over 2000 contours across this job — pick a coarser one":["Esse intervalo gera mais de 2000 curvas neste trabalho — escolha um mais grosseiro","Cette équidistance donne plus de 2000 courbes sur ce chantier — choisissez-en une plus grande","Esa equidistancia genera más de 2000 curvas en este trabajo — elija una mayor"],
+"No contours at this interval — check the elevation range":["Sem curvas neste intervalo — verifique a amplitude de cotas","Aucune courbe à cette équidistance — vérifiez la plage d'altitude","Sin curvas en esta equidistancia — compruebe el rango de cotas"],
+"LandXML written — ":["LandXML exportado — ","LandXML exporté — ","LandXML exportado — "],
+"DXF written — ":["DXF exportado — ","DXF exporté — ","DXF exportado — "],
+" points, ":[" pontos, "," points, "," puntos, "],
+" triangles, ":[" triângulos, "," triangles, "," triángulos, "],
+" points with levels + codes, on layers":[" pontos com cotas + códigos, em camadas"," points avec altitudes + codes, sur calques"," puntos con cotas + códigos, en capas"],
+" faces":[" faces"," faces"," caras"],
+" contour polylines written at ":[" polilinhas de curva exportadas a "," polylignes de courbes exportées à "," polilíneas de curva exportadas a "],
+" m, index every ":[" m, mestra a cada "," m, maîtresse tous les "," m, maestra cada "],
+"Working file saved — reopen it here to carry on":["Ficheiro de trabalho guardado — reabra-o aqui para continuar","Fichier de travail enregistré — rouvrez-le ici pour continuer","Archivo de trabajo guardado — reábralo aquí para continuar"],
+"Working file reopened":["Ficheiro de trabalho reaberto","Fichier de travail rouvert","Archivo de trabajo reabierto"],
+"That file is not a TIN Solver working file":["Esse ficheiro não é um ficheiro de trabalho do TIN Solver","Ce fichier n'est pas un fichier de travail TIN Solver","Ese archivo no es un archivo de trabajo de TIN Solver"]
+};
+const LANGS=['en','pt','fr','es'], LI={pt:0,fr:1,es:2};
+let LANG='en';
+/** translate a string: whole-string match first, then known fragments. */
+function T(s){
+  if(LANG==='en'||!s)return s;
+  const i=LI[LANG];
+  if(TR[s])return TR[s][i];
+  let out=s;
+  for(const k of FRAG) if(out.includes(k)) out=out.split(k).join(TR[k][i]);
+  return out;
+}
+// fragments longest-first so " points" never eats " points read, "
+const FRAG=Object.keys(TR).sort((a,b)=>b.length-a.length);
+/* snapshot the English DOM once, so switching language is always from source */
+let SNAP=null;const TOUCHED=new Set();
+function snapshot(){
+  SNAP={text:[],ph:[],title:document.title};
+  const w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,{acceptNode(n){
+    const p=n.parentNode.nodeName;
+    if(p==='SCRIPT'||p==='STYLE')return NodeFilter.FILTER_REJECT;
+    return n.nodeValue.trim()?NodeFilter.FILTER_ACCEPT:NodeFilter.FILTER_REJECT;}});
+  let n;while(n=w.nextNode())SNAP.text.push([n,n.nodeValue]);
+  document.querySelectorAll('[placeholder]').forEach(el=>SNAP.ph.push([el,el.placeholder]));
+}
+function applyLang(code){
+  LANG=LANGS.includes(code)?code:'en';
+  if(!SNAP)snapshot();
+  for(const [n,orig] of SNAP.text){
+    const t=orig.trim();
+    if(!t)continue;
+    const tr=T(t);
+    if(tr!==t){n.nodeValue=orig.replace(t,tr);TOUCHED.add(n);}
+    else if(TOUCHED.has(n)){n.nodeValue=orig;TOUCHED.delete(n);}   // back to English
+  }
+  for(const [el,orig] of SNAP.ph)el.placeholder=T(orig);
+  document.documentElement.lang=LANG==='pt'?'pt-PT':LANG;
+  try{localStorage.setItem('tinsolver-lang',LANG)}catch(e){}
+}
+
+let LASTMSG='';
+const msg=(t,warn)=>{LASTMSG=t;const r=$('rMsg');r.textContent=T(t);r.className=warn?'warn':'msg';};
 
 /* ══════════════ parse ══════════════ */
 function detectSep(lines){
@@ -453,10 +634,10 @@ function parse(text){
 function loadPoints(text,name){
   const {out,bad}=parse(text);
   if(!out.length){$('parseMsg').textContent='No points read. Check the column order and separator above.';return;}
-  S.raw=out;S.file=name;S.brk=[];S.swaps=[];
-  $('fname').textContent=name+' · '+out.length+' points';
-  $('parseMsg').textContent=bad.length?bad.length+' line(s) skipped — first was: '+bad[0].slice(0,40):
-    out.length+' points read, '+new Set(out.map(p=>p.code)).size+' codes.';
+  S.raw=out;S.file=name;S.brk=[];S.swaps=[];clearUndo();
+  $('fname').textContent=T(name+' · '+out.length+' points');
+  $('parseMsg').textContent=T(bad.length?bad.length+' line(s) skipped — first was: '+bad[0].slice(0,40):
+    out.length+' points read, '+new Set(out.map(p=>p.code)).size+' codes.');
   $('drop').classList.add('hide');
   rebuild();zoomAll();
 }
@@ -797,7 +978,7 @@ function tables(){
     const b=document.createElement('button');b.textContent='Chain';
     b.onclick=()=>chainCode(c);
     const o=document.createElement('button');o.textContent='Hide';
-    o.onclick=()=>{const any=list.some(p=>p.use);list.forEach(p=>p.use=!any);rebuild();};
+    o.onclick=()=>{pushUndo();const any=list.some(p=>p.use);list.forEach(p=>p.use=!any);rebuild();};
     d.append(b,o);cw.append(d);
   }
   // points
@@ -812,7 +993,7 @@ function tables(){
       '"></span>'+p.code+'</td><td class="num">'+p.z.toFixed(3)+'</td>';
     const td=document.createElement('td');td.className='num';
     const cb=document.createElement('input');cb.type='checkbox';cb.checked=p.use;
-    cb.onclick=e=>{e.stopPropagation();p.use=cb.checked;rebuild();};
+    cb.onclick=e=>{e.stopPropagation();pushUndo();p.use=cb.checked;rebuild();};
     td.append(cb);tr.append(td);
     tr.onclick=()=>{S.view.s=Math.max(S.view.s,6);
       S.view.ox=p.e-S.org.e-cv.clientWidth/2/S.view.s;
@@ -826,10 +1007,10 @@ function tables(){
     tr.innerHTML='<td>'+b.name+'</td><td class="num">'+b.ids.length+'</td>';
     const t1=document.createElement('td');t1.className='num';
     const cb=document.createElement('input');cb.type='checkbox';cb.checked=b.on;
-    cb.onclick=()=>{b.on=cb.checked;rebuild();};t1.append(cb);
+    cb.onclick=()=>{pushUndo();b.on=cb.checked;rebuild();};t1.append(cb);
     const t2=document.createElement('td');
     const del=document.createElement('button');del.textContent='×';del.style.padding='0 5px';
-    del.onclick=()=>{S.brk.splice(i,1);rebuild();};t2.append(del);
+    del.onclick=()=>{pushUndo();S.brk.splice(i,1);rebuild();};t2.append(del);
     tr.append(t1,t2);bb.append(tr);
   });
   // flags
@@ -850,11 +1031,13 @@ function tables(){
 function chainCode(c){
   const ids=S.raw.filter(p=>p.code===c&&p.use).map(p=>p.id);
   if(ids.length<2){msg('Code '+c+' has fewer than two points in use',true);return;}
+  pushUndo();
   S.brk.push({name:c+'-'+(S.brk.filter(b=>b.code===c).length+1),code:c,ids,on:true});
   rebuild();msg('Chained '+ids.length+' points on code '+c);
 }
 function finishDraft(){
   if(S.draft.length>1){
+    pushUndo();
     S.brk.push({name:'BL-'+(S.brk.length+1),code:'MANUAL',ids:S.draft.slice(),on:true});
     rebuild();msg('Breakline of '+S.draft.length+' points added');
   }
@@ -893,6 +1076,23 @@ function nearEdge(sx,sy,tol){
   return best;
 }
 
+/** nearest breakline to a click: returns its index in S.brk, or -1 */
+function nearBrk(sx,sy,tol){
+  let best=-1,bd=tol;
+  S.brk.forEach((b,bi)=>{
+    const pts=b.ids.map(id=>S.idx.get(id)).filter(i=>i!==undefined);
+    for(let k=1;k<pts.length;k++){
+      const a=S.loc[pts[k-1]],c=S.loc[pts[k]];
+      if(!a||!c)continue;
+      const ax=X(a),ay=Y(a),bx=X(c),by=Y(c),dx=bx-ax,dy=by-ay,L=dx*dx+dy*dy;
+      let t=L?((sx-ax)*dx+(sy-ay)*dy)/L:0;t=Math.max(0,Math.min(1,t));
+      const d=Math.hypot(sx-ax-t*dx,sy-ay-t*dy);
+      if(d<bd){bd=d;best=bi;}
+    }
+  });
+  return best;
+}
+
 /* ══════════════ interaction ══════════════ */
 let drag=null;
 cv.addEventListener('pointerdown',e=>{
@@ -913,12 +1113,13 @@ cv.addEventListener('pointerdown',e=>{
     if(S.tin.locked.has(k)){msg('That edge is held by a breakline — turn the breakline off first',true);return;}
     if(S.swapKeys.has(k)){                       // clicking your own swap puts it back
       const i=S.swaps.findIndex(s=>!s.stale&&ekey(S.idx.get(s.r),S.idx.get(s.l))===k);
-      if(i>=0){const s=S.swaps[i];S.swaps.splice(i,1);rebuild();
+      if(i>=0){pushUndo();const s=S.swaps[i];S.swaps.splice(i,1);rebuild();
         msg('Swap undone — back to '+s.p+'–'+s.q);return;}
     }
     const o=S.tin._opp(a,b);
     if(!o){msg('Edge is on the boundary, there is only one triangle to swap',true);return;}
     if(!S.tin._convex(a,o.r,b,o.l)){msg('Those two triangles do not make a convex shape — that swap would fold the surface over itself',true);return;}
+    pushUndo();
     S.swaps.push({p:S.act[a].id,q:S.act[b].id,r:S.act[o.r].id,l:S.act[o.l].id,stale:false});
     rebuild();
     msg('Swapped '+S.act[a].id+'–'+S.act[b].id+' to '+S.act[o.r].id+'–'+S.act[o.l].id);
@@ -926,9 +1127,31 @@ cv.addEventListener('pointerdown',e=>{
   else if(S.tool==='off'){
     const i=nearRaw(sx,sy,10);
     if(i<0){msg('No point within reach',true);return;}
+    pushUndo();
     S.raw[i].use=!S.raw[i].use;
     msg('Point '+S.raw[i].id+(S.raw[i].use?' back in the surface':' left out of the surface'));
     rebuild();
+  }
+  else if(S.tool==='delbrk'){
+    const bi=nearBrk(sx,sy,10);
+    if(bi<0){msg('No breakline within reach',true);return;}
+    const nm=S.brk[bi].name;
+    pushUndo();
+    S.brk.splice(bi,1);rebuild();
+    msg('Breakline '+nm+' removed');
+  }
+  else if(S.tool==='delpt'){
+    const i=nearRaw(sx,sy,10);
+    if(i<0){msg('No point within reach',true);return;}
+    const id=S.raw[i].id;
+    pushUndo();
+    S.raw.splice(i,1);
+    // drop it from every breakline, and bin any breakline left too short
+    S.brk.forEach(b=>{b.ids=b.ids.filter(x=>x!==id)});
+    S.brk=S.brk.filter(b=>b.ids.length>=2);
+    S.swaps=S.swaps.filter(sw=>sw.p!==id&&sw.q!==id&&sw.r!==id&&sw.l!==id);
+    rebuild();
+    msg('Point '+id+' deleted from the file');
   }
 });
 cv.addEventListener('pointermove',e=>{
@@ -959,11 +1182,24 @@ addEventListener('keydown',e=>{
   if(e.key==='Escape'){S.draft=[];draw();msg('Breakline abandoned');}
   if(e.key==='z'&&(e.ctrlKey||e.metaKey))undo();
 });
+/* ── undo: snapshot the editable state before every change ── */
+const UNDO=[];
+function pushUndo(){
+  UNDO.push({
+    raw:S.raw.map(p=>({...p})),
+    brk:S.brk.map(b=>({...b,ids:[...b.ids]})),
+    swaps:S.swaps.map(x=>({...x})),
+  });
+  if(UNDO.length>50)UNDO.shift();
+}
+function clearUndo(){UNDO.length=0;}
 function undo(){
-  if(S.draft.length){S.draft.pop();draw();return;}
-  if(S.swaps.length){S.swaps.pop();rebuild();msg('Swap undone');return;}
-  if(S.brk.length){S.brk.pop();rebuild();msg('Breakline removed');return;}
-  msg('Nothing left to undo');
+  if(S.draft.length){S.draft.pop();draw();return;}      // still drawing: step back a point
+  const u=UNDO.pop();
+  if(!u){msg('Nothing left to undo');return;}
+  S.raw=u.raw;S.brk=u.brk;S.swaps=u.swaps;
+  rebuild();
+  msg('Edit undone');
 }
 
 /* ══════════════ export ══════════════ */
@@ -1012,35 +1248,43 @@ function exportDXF(){
   if(!S.tin)return;
   const {faces}=usedFaces();
   const o=[];const g=(c,v)=>{o.push(c,v)};
+  // text height scaled to the survey extent
+  let mnx=Infinity,mxx=-Infinity,mny=Infinity,mxy=-Infinity;
+  for(const p of S.act){mnx=Math.min(mnx,p.e);mxx=Math.max(mxx,p.e);mny=Math.min(mny,p.n);mxy=Math.max(mxy,p.n);}
+  const diag=Math.hypot(mxx-mnx,mxy-mny)||100, th=Math.max(0.25,diag/320), off=th*0.6;
+  const safe=s=>s.replace(/[^A-Z0-9_-]/gi,'_');
+  // layer table so everything lands on named, coloured layers
+  const layers=[['SURV-POINTS',7],['SURV-LEVELS',3],['SURV-CODES',4],['TIN-TRIANGLES',8]];
+  for(const b of S.brk) if(b.on) layers.push(['BRK-'+safe(b.name),1]);
+  g(0,'SECTION');g(2,'TABLES');g(0,'TABLE');g(2,'LAYER');g(70,layers.length);
+  for(const [nm,col] of layers){g(0,'LAYER');g(2,nm);g(70,'0');g(62,col);g(6,'CONTINUOUS');}
+  g(0,'ENDTAB');g(0,'ENDSEC');
   g(0,'SECTION');g(2,'ENTITIES');
+  // triangles
   for(const t of faces){
-    g(0,'3DFACE');g(8,'TIN-FACES');
-    [0,1,2,2].forEach((v,j)=>{
-      const p=S.act[t[v]];
-      g(10+j,p.e.toFixed(4));g(20+j,p.n.toFixed(4));g(30+j,p.z.toFixed(4));
-    });
+    g(0,'3DFACE');g(8,'TIN-TRIANGLES');
+    [0,1,2,2].forEach((v,j)=>{const p=S.act[t[v]];g(10+j,p.e.toFixed(4));g(20+j,p.n.toFixed(4));g(30+j,p.z.toFixed(4));});
   }
+  // points + elevation text + code text
   for(const p of S.act){
-    g(0,'POINT');g(8,'PTS-'+p.code.replace(/[^A-Z0-9_-]/gi,'_'));
-    g(10,p.e.toFixed(4));g(20,p.n.toFixed(4));g(30,p.z.toFixed(4));
+    g(0,'POINT');g(8,'SURV-POINTS');g(10,p.e.toFixed(4));g(20,p.n.toFixed(4));g(30,p.z.toFixed(4));
+    g(0,'TEXT');g(8,'SURV-LEVELS');g(10,(p.e+off).toFixed(4));g(20,(p.n+off).toFixed(4));g(30,p.z.toFixed(4));g(40,th.toFixed(3));g(1,p.z.toFixed(2));
+    if(p.code){g(0,'TEXT');g(8,'SURV-CODES');g(10,(p.e+off).toFixed(4));g(20,(p.n-off-th).toFixed(4));g(30,p.z.toFixed(4));g(40,th.toFixed(3));g(1,p.code);}
   }
+  // breaklines
   for(const b of S.brk){
     if(!b.on)continue;
     const pts=b.ids.map(id=>S.idx.get(id)).filter(i=>i!==undefined);
     if(pts.length<2)continue;
-    g(0,'POLYLINE');g(8,'BRK-'+b.name.replace(/[^A-Z0-9_-]/gi,'_'));g(66,'1');g(70,'8');
+    g(0,'POLYLINE');g(8,'BRK-'+safe(b.name));g(66,'1');g(70,'8');
     g(10,'0');g(20,'0');g(30,'0');
-    for(const i of pts){
-      const p=S.act[i];
-      g(0,'VERTEX');g(8,'BRK');g(70,'32');
-      g(10,p.e.toFixed(4));g(20,p.n.toFixed(4));g(30,p.z.toFixed(4));
-    }
+    for(const i of pts){const p=S.act[i];g(0,'VERTEX');g(8,'BRK-'+safe(b.name));g(70,'32');g(10,p.e.toFixed(4));g(20,p.n.toFixed(4));g(30,p.z.toFixed(4));}
     g(0,'SEQEND');
   }
   g(0,'ENDSEC');g(0,'EOF');
   let s='';for(let i=0;i<o.length;i+=2)s+=String(o[i]).padStart(3,' ')+'\n'+o[i+1]+'\n';
   save(($('sname').value.trim()||'EG-FIELD')+'.dxf',s,'application/dxf');
-  msg('DXF written — '+faces.length+' 3D faces');
+  msg('DXF written — '+faces.length+' triangles, '+S.act.length+' points with levels + codes, on layers');
 }
 function exportContours(){
   if(!S.tin)return;
@@ -1091,7 +1335,7 @@ function exportProject(){
 }
 function importProject(t){
   const j=JSON.parse(t);
-  S.raw=j.raw;S.brk=j.brk||[];S.file=j.file||'';
+  S.raw=j.raw;S.brk=j.brk||[];S.file=j.file||'';clearUndo();
   S.swaps=(j.swaps||[]).filter(s=>s&&s.p!==undefined);   // v1 swaps had no old diagonal, drop them
   $('sname').value=j.sname||'EG-FIELD';$('cint').value=j.cint||0.5;$('ztol').value=j.ztol||0.5;
   S.maxEdgePct=j.maxEdgePct??100;$('maxEdge').value=S.maxEdgePct;
@@ -1148,7 +1392,9 @@ document.querySelectorAll('.tool').forEach(b=>b.onclick=()=>{
   msg({pan:'Drag to pan, wheel to zoom',
        break:'Click points in order, Enter to finish',
        swap:'Click a triangle edge to swap the diagonal — click a swapped edge again to put it back',
-       off:'Click a point to leave it out of the surface, click again to bring it back'}[S.tool]);
+       off:'Click a point to leave it out of the surface, click again to bring it back',
+       delbrk:'Click a breakline to delete it — the points stay, only the string goes',
+       delpt:'Click a point to delete it from the file — Undo puts it back'}[S.tool]);
 });
 $('btnZoomAll').onclick=zoomAll;
 $('btnUndo').onclick=undo;
@@ -1173,6 +1419,9 @@ document.body.addEventListener('drop',e=>{
 });
 new ResizeObserver(resize).observe(cv.parentElement);
 resize();
+$('lang').onchange=e=>{applyLang(e.target.value);msg(LASTMSG);};
+let saved='en';try{saved=localStorage.getItem('tinsolver-lang')||'en'}catch(e){}
+$('lang').value=saved;applyLang(saved);
 msg('Open a points file, or load the sample to see how it works');
 </script>
 </body>
