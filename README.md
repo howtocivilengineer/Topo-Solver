@@ -111,9 +111,9 @@ hand-rolled and run client-side.
 
 ## Feedback
 
-Found a bug, or have a file that doesn't import cleanly? Open an
-[issue](../../issues) — a sample of the points file that caused it is the fastest way to get
-it fixed.
+Found a bug, have a file that doesn't import cleanly, or have an idea to make Topo Solver better? Open an issue.
+
+If you're reporting a bug, including a sample of the points file that caused the problem is the fastest way to help reproduce and fix it. Feature requests, usability suggestions, and general feedback are always welcome.
 
 ---
 
