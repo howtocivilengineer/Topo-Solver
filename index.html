@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Generate Contours and TIN surfaces from Survey Points</title>
+<title>TOPO Solver — survey points to a reviewed surface</title>
 <style>
 :root{
   --graphite:#1D2025;
@@ -75,7 +75,6 @@ button[disabled]{opacity:.4;cursor:not-allowed}
 .list td{padding:2px 5px;border-bottom:1px solid #22262C;white-space:nowrap}
 .list tr:hover td{background:#22262C}
 .list tr.off td{color:#5A6069;text-decoration:line-through}
-.list tr.flag td:first-child{border-left:2px solid var(--pen-flag)}
 .list td.num{text-align:right}
 .chip{display:inline-block;padding:1px 5px;border-radius:2px;background:var(--graphite-3);font-size:10px}
 .swatch{display:inline-block;width:8px;height:8px;border-radius:1px;margin-right:5px;vertical-align:baseline}
@@ -118,26 +117,88 @@ canvas{display:block;width:100%;height:100%;cursor:crosshair;touch-action:none}
   .panel,.panel.right{width:100%;border:0;border-bottom:1px solid #000}
   .stage{order:-1;height:62vh;flex:0 0 auto}
 }
-.langsel{background:#141a22;color:#cfd8e3;border:1px solid #2b3644;border-radius:6px;
-  padding:4px 8px;font:inherit;font-size:12px;margin-right:8px;cursor:pointer}
+.langsel{background:#141a22;color:#cfd8e3;border:1px solid #2b3644;border-radius:4px;
+  width:auto;min-width:0;padding:3px 6px;font:inherit;font-size:11px;margin-right:8px;cursor:pointer}
 .langsel:hover{border-color:#3d7ab8}
+/* header now carries the tool rows */
+header{align-items:stretch;flex-direction:column;gap:6px}
+.hrow{display:flex;align-items:center;flex-wrap:wrap;gap:6px 8px;width:100%}
+.hrow h1{flex:0 0 auto;margin-right:4px}
+.hright{margin-left:auto;display:flex;align-items:center;gap:8px;flex:0 0 auto}
+.lays{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px}
+header h1{flex:0 0 auto;margin-right:6px}
+header .toolbar{background:transparent;border:0;padding:0;flex:0 1 auto;min-width:0}
+.vex{width:46px;background:#141a22;color:#cfd8e3;border:1px solid #2b3644;border-radius:2px;
+  padding:3px 4px;font:inherit;font-size:11px}
+input.vex{width:44px;flex:0 0 auto;padding:3px 4px;font-size:11px}
+.vexwrap{display:inline-flex;align-items:center;gap:4px;flex:0 0 auto;
+  font-family:var(--stencil);text-transform:uppercase;letter-spacing:.06em;font-size:10px;color:var(--mute)}
+#btn3D.on{background:var(--lcd);color:#0b0f14;border-color:var(--lcd)}
+button.ico{font-size:16px;line-height:1;padding:3px 8px;min-width:30px}
+/* collapsible left-panel sections */
+.panel section>h2{display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none}
+.panel section>h2::after{content:'▾';color:var(--mute);font-size:10px;margin-left:8px}
+.panel section.collapsed>h2::after{content:'▸'}
+.panel section.collapsed>*:not(h2){display:none}
+/* nested sub-blocks inside a grouped section (Edit Surface) */
+.panel .sub{padding:8px 0;border-top:1px dotted #363B44}
+.panel .sub:first-child{border-top:0;padding-top:2px}
+.panel .sub>h3{display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none;font-size:11px;color:var(--lcd);margin:0 0 7px}
+.panel .sub>h3::after{content:'▾';color:var(--mute);font-size:10px;margin-left:8px}
+.panel .sub.collapsed>h3::after{content:'▸'}
+.panel .sub.collapsed>*:not(h3){display:none}
+/* anchor styled as a wide button, for the Help links */
+a.linkbtn{display:block;width:100%;margin-top:6px;text-align:center;text-decoration:none;
+  font-family:var(--stencil);text-transform:uppercase;letter-spacing:.1em;font-size:11px;font-weight:700;
+  background:var(--graphite-3);color:#E6E9EC;border:1px solid #10131A;border-radius:2px;padding:6px 9px;cursor:pointer}
+a.linkbtn:hover{background:#3D434E}
+.drop .blurb{font-size:12px;line-height:1.5;color:var(--pen-hull);margin:0 0 16px;font-weight:600}
 </style>
 </head>
 <body>
 
 <header>
-  <h1>TIN Solver</h1>
-  <span class="sub">build and review the surface from your own points, then hand it over as LandXML</span>
-  <span class="spacer"></span>
-  <select id="lang" class="langsel" title="Language"><option value="en">English</option><option value="pt">Português (PT)</option><option value="fr">Français</option><option value="es">Español</option></select>
-  <span class="tag" id="fname">no file loaded</span>
+  <div class="hrow">
+    <h1>TOPO Solver</h1>
+    <div class="toolbar">
+      <button class="tool on" data-tool="pan" id="tPan">Pan</button>
+      <span class="sep"></span>
+      <button class="tool" data-tool="break">Draw breakline</button>
+      <button class="tool" data-tool="delbrk">Remove breakline</button>
+      <span class="sep"></span>
+      <button class="tool" data-tool="off">Exclude point</button>
+      <button class="tool" data-tool="delpt">Remove point</button>
+      <span class="sep"></span>
+      <button class="tool" data-tool="swap">Swap edge</button>
+      <button class="tool" data-tool="deledge">Remove edge</button>
+    </div>
+    <div class="hright">
+      <button id="btn3D" title="Switch between plan and 3D orbit">3D</button>
+      <label class="vexwrap" title="Vertical exaggeration (3D view)">Z scale <input id="vex" class="vex" type="number" min="0.5" max="20" step="0.5" value="3"></label>
+      <button id="btnUndo" class="ico" title="Undo (Ctrl+Z)">↶</button>
+      <button id="btnRedo" class="ico" title="Redo (Ctrl+Y)">↷</button>
+    </div>
+  </div>
+  <div class="hrow">
+    <div class="lays">
+      <label class="lay"><input type="checkbox" id="lTri" checked>Triangles</label>
+      <label class="lay"><input type="checkbox" id="lBrk" checked>Breaklines</label>
+      <label class="lay"><input type="checkbox" id="lPts" checked>Points</label>
+      <label class="lay"><input type="checkbox" id="lLab">Labels</label>
+      <label class="lay"><input type="checkbox" id="lCon">Contours</label>
+    </div>
+    <div class="hright">
+      <select id="lang" class="langsel" title="Language"><option value="en">EN</option><option value="pt">PT</option><option value="fr">FR</option><option value="es">ES</option></select>
+      <span class="tag" id="fname">no file loaded</span>
+    </div>
+  </div>
 </header>
 
 <main>
-  <!-- ─────────── LEFT ─────────── -->
+  <!-- ─────────── LEFT (all controls, collapsible) ─────────── -->
   <div class="panel">
     <section>
-      <h2>1 · Points file</h2>
+      <h2>1 · Import</h2>
       <div class="row">
         <button class="wide" id="btnOpen">Open .txt / .csv</button>
         <button class="wide" id="btnSample">Load sample</button>
@@ -162,54 +223,104 @@ canvas{display:block;width:100%;height:100%;cursor:crosshair;touch-action:none}
       <p class="hint" id="parseMsg">Lines that don't parse are skipped and listed here.</p>
     </section>
 
-    <section>
-      <h2>2 · Codes</h2>
-      <div class="codes" id="codes"></div>
-      <p class="hint">Chain turns every point sharing a code into one breakline, in file order — that's how the points were shot, so that's the order the string was walked.</p>
+    <section class="group">
+      <h2>2 · Edit Surface</h2>
+      <div class="grpbody">
+
+        <div class="sub">
+          <h3>Codes</h3>
+          <div class="codes" id="codes"></div>
+          <p class="hint">Chain turns every point sharing a code into one breakline, in file order — that's how the points were shot, so that's the order the string was walked.</p>
+        </div>
+
+        <div class="sub">
+          <h3>Points</h3>
+          <label class="f">Filter by code or number</label>
+          <input type="text" id="pfilter" placeholder="e.g. EK  or  1024">
+          <div class="list" style="margin-top:6px">
+            <table>
+              <thead><tr><th>Pt</th><th>Code</th><th class="num">Elev</th><th class="num">Use</th></tr></thead>
+              <tbody id="ptbody"></tbody>
+            </table>
+          </div>
+          <p class="hint">Click a row to zoom to it. Untick to exclude a point from the surface — the point stays in the file, it just stops pulling the triangles around.</p>
+        </div>
+
+        <div class="sub">
+          <h3>Breaklines</h3>
+          <div class="list" style="max-height:150px">
+            <table>
+              <thead><tr><th>Name</th><th class="num">Pts</th><th class="num">On</th><th></th></tr></thead>
+              <tbody id="brkbody"></tbody>
+            </table>
+          </div>
+          <p class="hint" id="brkMsg">Draw breakline: click points in order, then press Enter to close the string, Esc to abandon it.</p>
+        </div>
+
+        <div class="sub">
+          <h3>Triangles</h3>
+          <label class="f">Trim triangles longer than <span id="meLbl">—</span></label>
+          <input type="range" id="maxEdge" min="0" max="100" value="100">
+          <p class="hint">Cuts the long thin triangles that reach across the outside of the job. Slide left until the boundary matches where you actually surveyed.</p>
+        </div>
+
+        <div class="sub">
+          <h3>Contours</h3>
+          <label class="f">Contour interval</label>
+          <select id="cint">
+            <option value="0.1">0.1 m — detail / flat site</option>
+            <option value="0.2">0.2 m</option>
+            <option value="0.5" selected>0.5 m</option>
+            <option value="1">1 m</option>
+            <option value="2">2 m — steep ground</option>
+          </select>
+          <p class="hint">Every 5th contour draws heavy and exports to its own layer, the way an index contour should.</p>
+          <label class="lay"><input type="checkbox" id="cSmooth" checked>Smooth contours</label>
+          <p class="hint">Rounds the triangle-edge kinks so the drawn and exported contours read like a real survey plan. Turn off to see the raw TIN facets.</p>
+        </div>
+
+      </div>
     </section>
 
     <section>
-      <h2>Points</h2>
-      <label class="f">Filter by code or number</label>
-      <input type="text" id="pfilter" placeholder="e.g. EK  or  1024">
-      <div class="list" style="margin-top:6px">
-        <table>
-          <thead><tr><th>Pt</th><th>Code</th><th class="num">Elev</th><th class="num">Use</th></tr></thead>
-          <tbody id="ptbody"></tbody>
-        </table>
-      </div>
-      <p class="hint">Click a row to zoom to it. Untick to leave a point out of the surface — the point stays in the file, it just stops pulling the triangles around.</p>
+      <h2>3 · Exports</h2>
+      <label class="f">Surface name</label>
+      <input type="text" id="sname" value="EG-FIELD">
+      <button class="primary wide" id="exLX">Export LandXML surface</button>
+      <button class="wide" id="exDXF">Export DXF — points, surface, breaklines, contours</button>
+      <button class="wide" id="exPRJ">Save working file (.json)</button>
+      <button class="wide" id="btnLoadPrj">Reopen a working file</button>
+      <input type="file" id="prjfile" accept=".json" hidden>
+    </section>
+
+    <section>
+      <h2>Surface Info</h2>
+      <div class="kv"><span>Points used</span><span id="sPts">0</span></div>
+      <div class="kv"><span>Triangles</span><span id="sTri">0</span></div>
+      <div class="kv"><span>Breakline segs held</span><span id="sBrk">0</span></div>
+      <div class="kv"><span>Elev range</span><span id="sZ">—</span></div>
+      <div class="kv"><span>Plan area</span><span id="sA2">—</span></div>
+      <div class="kv"><span>Surface area</span><span id="sA3">—</span></div>
+    </section>
+
+    <section>
+      <h2>Help</h2>
+      <a class="linkbtn" href="https://github.com/howtocivilengineer/Topo-Solver/blob/main/README.md" target="_blank" rel="noopener">Readme — guide &amp; docs</a>
+      <a class="linkbtn" href="https://www.youtube.com/@howtocivilengineer" target="_blank" rel="noopener">Video walkthrough</a>
+      <p class="hint">Both open in a new tab.</p>
     </section>
   </div>
 
   <!-- ─────────── STAGE ─────────── -->
   <div class="stage">
-    <div class="toolbar">
-      <button class="tool on" data-tool="pan" id="tPan">Pan</button>
-      <button class="tool" data-tool="break">Draw breakline</button>
-      <button class="tool" data-tool="swap">Swap edge</button>
-      <button class="tool" data-tool="off">Toggle point</button>
-      <button class="tool" data-tool="delbrk">Remove breakline</button>
-      <button class="tool" data-tool="delpt">Remove point</button>
-      <span class="sep"></span>
-      <button id="btnZoomAll">Zoom all</button>
-      <button id="btnUndo">Undo edit</button>
-      <span class="sep"></span>
-      <label class="lay"><input type="checkbox" id="lTri" checked>Triangles</label>
-      <label class="lay"><input type="checkbox" id="lBrk" checked>Breaklines</label>
-      <label class="lay"><input type="checkbox" id="lPts" checked>Points</label>
-      <label class="lay"><input type="checkbox" id="lLab">Labels</label>
-      <label class="lay"><input type="checkbox" id="lCon">Contours</label>
-      <label class="lay"><input type="checkbox" id="lFlag" checked>Flags</label>
-    </div>
     <div id="wrap">
       <canvas id="cv"></canvas>
       <div class="drop" id="drop">
         <div class="in">
+          <p class="blurb">Import data, review and edit surface, export to dxf or xml.</p>
           <h3>Drop a points file here</h3>
           <p>Comma, space or tab separated. One point per line, point number first if you have one.
              Nothing is uploaded anywhere — this page does all the work on your machine, offline.</p>
-          <button class="primary" id="btnSample2">Load a sample road survey instead</button>
         </div>
       </div>
     </div>
@@ -222,70 +333,6 @@ canvas{display:block;width:100%;height:100%;cursor:crosshair;touch-action:none}
       <span><b>Edits</b><span id="rEd">0</span></span>
       <span class="msg" id="rMsg"></span>
     </div>
-  </div>
-
-  <!-- ─────────── RIGHT ─────────── -->
-  <div class="panel right">
-    <section>
-      <h2>3 · Breaklines</h2>
-      <div class="list" style="max-height:150px">
-        <table>
-          <thead><tr><th>Name</th><th class="num">Pts</th><th class="num">On</th><th></th></tr></thead>
-          <tbody id="brkbody"></tbody>
-        </table>
-      </div>
-      <p class="hint" id="brkMsg">Draw breakline: click points in order, then press Enter to close the string, Esc to abandon it.</p>
-    </section>
-
-    <section>
-      <h2>4 · Review</h2>
-      <label class="f">Trim triangles longer than <span id="meLbl">—</span></label>
-      <input type="range" id="maxEdge" min="0" max="100" value="100">
-      <p class="hint">Cuts the long thin triangles that reach across the outside of the job. Slide left until the boundary matches where you actually surveyed.</p>
-      <label class="f">Contour interval</label>
-      <select id="cint">
-        <option value="0.1">0.1 m — detail / flat site</option>
-        <option value="0.2">0.2 m</option>
-        <option value="0.5" selected>0.5 m</option>
-        <option value="1">1 m</option>
-        <option value="2">2 m — steep ground</option>
-      </select>
-      <p class="hint">Every 5th contour draws heavy and exports to its own layer, the way an index contour should.</p>
-      <label class="lay"><input type="checkbox" id="cSmooth" checked>Smooth contours</label>
-      <p class="hint">Rounds the triangle-edge kinks so the drawn and exported contours read like a real survey plan. Turn off to see the raw TIN facets.</p>
-      <label class="f">Flag points more than this off their neighbours (m)</label>
-      <input type="number" id="ztol" value="0.5" step="0.05" min="0.01">
-      <div class="list" style="max-height:130px;margin-top:6px">
-        <table>
-          <thead><tr><th>Pt</th><th>Code</th><th class="num">Elev</th><th class="num">Off by</th></tr></thead>
-          <tbody id="flagbody"></tbody>
-        </table>
-      </div>
-      <p class="hint">A point sitting well above or below the ground around it is usually a rod height left wrong or a mis-typed elevation. Check it against the field notes before you send the surface on.</p>
-    </section>
-
-    <section>
-      <h2>Surface</h2>
-      <div class="kv"><span>Points used</span><span id="sPts">0</span></div>
-      <div class="kv"><span>Triangles</span><span id="sTri">0</span></div>
-      <div class="kv"><span>Breakline segs held</span><span id="sBrk">0</span></div>
-      <div class="kv"><span>Elev range</span><span id="sZ">—</span></div>
-      <div class="kv"><span>Plan area</span><span id="sA2">—</span></div>
-      <div class="kv"><span>Surface area</span><span id="sA3">—</span></div>
-    </section>
-
-    <section>
-      <h2>5 · Hand over</h2>
-      <label class="f">Surface name</label>
-      <input type="text" id="sname" value="EG-FIELD">
-      <button class="primary wide" id="exLX">Export LandXML surface</button>
-      <button class="wide" id="exDXF">Export DXF — points, levels, codes, triangles, breaklines</button>
-      <button class="wide" id="exCON">Export DXF — contours at <span id="ivLbl">0.5</span> m</button>
-      <button class="wide" id="exPRJ">Save working file (.json)</button>
-      <button class="wide" id="btnLoadPrj">Reopen a working file</button>
-      <input type="file" id="prjfile" accept=".json" hidden>
-      <p class="hint">The LandXML carries the exact triangles on screen — every swap, every breakline, every point you left out. Imported into Civil 3D it comes in as your surface, not a fresh triangulation of your points.</p>
-    </section>
   </div>
 </main>
 
@@ -417,10 +464,12 @@ const S={
   org:{e:0,n:0},
   brk:[],                     // {name,code,ids:[],on}
   swaps:[],                   // [idA,idB] user diagonals
+  delTri:new Set(),           // deleted triangles, keyed by sorted point-id triple
   tin:null, idx:new Map(), loc:[], act:[],
   keep:new Set(),             // triangle indices passing trim
-  contours:[], flags:[], hull:[],
+  contours:[], hull:[],
   view:{s:1,ox:0,oy:0}, tool:'pan', draft:[],
+  view3d:false, orbit:{az:35,el:58,zoom:1,px:0,py:0},
   maxEdgePct:100, maxEdgeVal:Infinity, held:0, longest:1
 };
 const $=id=>document.getElementById(id);
@@ -466,16 +515,15 @@ const TR={
 "Pan":["Deslocar","Déplacer","Desplazar"],
 "Draw breakline":["Desenhar linha de quebra","Tracer une ligne de rupture","Dibujar línea de rotura"],
 "Swap edge":["Trocar aresta","Permuter l'arête","Intercambiar arista"],
-"Toggle point":["Alternar ponto","Activer/exclure un point","Alternar punto"],
+"Exclude point":["Excluir ponto","Exclure un point","Excluir punto"],
 "Remove breakline":["Remover linha de quebra","Supprimer une ligne de rupture","Eliminar línea de rotura"],
 "Remove point":["Remover ponto","Supprimer un point","Eliminar punto"],
-"Zoom all":["Ver tudo","Tout afficher","Ver todo"],
+"Remove edge":["Remover aresta","Supprimer l'arête","Eliminar arista"],
 "Undo edit":["Anular edição","Annuler la modification","Deshacer edición"],
 "Triangles":["Triângulos","Triangles","Triángulos"],
 "Breaklines":["Linhas de quebra","Lignes de rupture","Líneas de rotura"],
 "Labels":["Etiquetas","Étiquettes","Etiquetas"],
 "Contours":["Curvas de nível","Courbes de niveau","Curvas de nivel"],
-"Flags":["Alertas","Alertes","Avisos"],
 "Drop a points file here":["Largue aqui um ficheiro de pontos","Déposez ici un fichier de points","Suelte aquí un archivo de puntos"],
 "Load a sample road survey instead":["Ou carregue um levantamento de estrada de exemplo","Ou chargez un levé de route d'exemple","O cargue un levantamiento de carretera de ejemplo"],
 "Near":["Próx.","Proche","Cerca"],
@@ -496,7 +544,6 @@ const TR={
 "Every 5th contour draws heavy and exports to its own layer, the way an index contour should.":["Cada 5.ª curva é desenhada a cheio e exportada para a sua própria camada, como deve ser uma curva mestra.","Chaque 5e courbe est tracée en gras et exportée sur son propre calque, comme il se doit pour une courbe maîtresse.","Cada 5.ª curva se dibuja gruesa y se exporta a su propia capa, como corresponde a una curva maestra."],
 "Smooth contours":["Suavizar curvas de nível","Lisser les courbes","Suavizar curvas"],
 "Rounds the triangle-edge kinks so the drawn and exported contours read like a real survey plan. Turn off to see the raw TIN facets.":["Arredonda os vértices das arestas dos triângulos para que as curvas desenhadas e exportadas pareçam uma planta topográfica real. Desligue para ver as facetas do TIN em bruto.","Arrondit les cassures aux arêtes des triangles pour que les courbes tracées et exportées ressemblent à un vrai plan topographique. Désactivez pour voir les facettes brutes du TIN.","Redondea los quiebres en las aristas de los triángulos para que las curvas dibujadas y exportadas parezcan un plano topográfico real. Desactive para ver las facetas del TIN en bruto."],
-"Flag points more than this off their neighbours (m)":["Assinalar pontos que se afastem mais do que isto dos vizinhos (m)","Signaler les points s'écartant de plus de ceci de leurs voisins (m)","Señalar puntos que se aparten más de esto de sus vecinos (m)"],
 "A point sitting well above or below the ground around it is usually a rod height left wrong or a mis-typed elevation. Check it against the field notes before you send the surface on.":["Um ponto muito acima ou abaixo do terreno em redor resulta normalmente de uma altura de baliza errada ou de uma cota mal introduzida. Verifique-o com as notas de campo antes de entregar a superfície.","Un point nettement au-dessus ou au-dessous du terrain environnant provient généralement d'une hauteur de canne erronée ou d'une altitude mal saisie. Vérifiez-le avec le carnet de terrain avant de livrer la surface.","Un punto muy por encima o por debajo del terreno circundante suele deberse a una altura de jalón incorrecta o a una cota mal escrita. Compruébelo con las notas de campo antes de entregar la superficie."],
 "Surface name":["Nome da superfície","Nom de la surface","Nombre de la superficie"],
 "Export LandXML surface":["Exportar superfície LandXML","Exporter la surface LandXML","Exportar superficie LandXML"],
@@ -540,6 +587,10 @@ const TR={
 " has fewer than two points in use":[" tem menos de dois pontos em uso"," a moins de deux points utilisés"," tiene menos de dos puntos en uso"],
 " point(s) picked — Enter to finish, Esc to abandon":[" ponto(s) selecionado(s) — Enter para terminar, Esc para abandonar"," point(s) sélectionné(s) — Entrée pour terminer, Échap pour abandonner"," punto(s) seleccionado(s) — Intro para terminar, Esc para abandonar"],
 "Nothing left to undo":["Nada para anular","Plus rien à annuler","Nada que deshacer"],
+"Nothing left to redo":["Nada para refazer","Plus rien à rétablir","Nada que rehacer"],
+"Edit redone":["Edição refeita","Modification rétablie","Edición rehecha"],
+"Undo":["Anular","Annuler","Deshacer"],
+"Redo":["Refazer","Rétablir","Rehacer"],
 "No points read. Check the column order and separator above.":["Nenhum ponto lido. Verifique a ordem das colunas e o separador acima.","Aucun point lu. Vérifiez l'ordre des colonnes et le séparateur ci-dessus.","Ningún punto leído. Compruebe el orden de las columnas y el separador arriba."],
 " points read, ":[" pontos lidos, "," points lus, "," puntos leídos, "],
 " points":[" pontos"," points"," puntos"],
@@ -634,7 +685,7 @@ function parse(text){
 function loadPoints(text,name){
   const {out,bad}=parse(text);
   if(!out.length){$('parseMsg').textContent='No points read. Check the column order and separator above.';return;}
-  S.raw=out;S.file=name;S.brk=[];S.swaps=[];clearUndo();
+  S.raw=out;S.file=name;S.brk=[];S.swaps=[];S.delTri=new Set();clearUndo();
   $('fname').textContent=T(name+' · '+out.length+' points');
   $('parseMsg').textContent=T(bad.length?bad.length+' line(s) skipped — first was: '+bad[0].slice(0,40):
     out.length+' points read, '+new Set(out.map(p=>p.code)).size+' codes.');
@@ -680,7 +731,7 @@ function rebuild(){
   tin.compact();
   S.swapKeys=new Set([...S.swaps].filter(s=>!s.stale).map(s=>ekey(S.idx.get(s.r),S.idx.get(s.l))));
   S.tin=tin;S.brkWant=want;
-  trim();findHull();findFlags();makeContours();
+  trim();findHull();makeContours();
   draw();stats();
   const ms=Math.round(performance.now()-t0);
   const notes=[];
@@ -704,8 +755,12 @@ function trim(){
   S.maxEdgeVal=pct>=100?Infinity:(long*Math.pow(pct/100,2));
   S.keep=new Set();
   lens.forEach((l,i)=>{if(l<=S.maxEdgeVal)S.keep.add(i)});
+  if(S.delTri.size){                         // drop any triangle the user removed by hand
+    S.tin.tris.forEach((t,i)=>{if(S.keep.has(i)&&S.delTri.has(triIdKey(t)))S.keep.delete(i);});
+  }
   $('meLbl').textContent=pct>=100?'(no trim)':fmt(S.maxEdgeVal,1)+' m';
 }
+function triIdKey(t){return [S.act[t[0]].id,S.act[t[1]].id,S.act[t[2]].id].sort().join('|');}
 function findHull(){
   S.hull=[];
   if(!S.tin)return;
@@ -713,28 +768,6 @@ function findHull(){
     const n=v.filter(i=>S.keep.has(i)).length;
     if(n===1){const i=k.indexOf(':');S.hull.push([+k.slice(0,i),+k.slice(i+1)]);}
   }
-}
-function findFlags(){
-  S.flags=[];
-  if(!S.tin)return;
-  const tol=parseFloat($('ztol').value)||0.5;
-  const nb=new Map();
-  for(const k of S.tin.edges.keys()){
-    const i=k.indexOf(':'),a=+k.slice(0,i),b=+k.slice(i+1);
-    if(!nb.has(a))nb.set(a,[]);if(!nb.has(b))nb.set(b,[]);
-    nb.get(a).push(b);nb.get(b).push(a);
-  }
-  for(const [i,list] of nb){
-    if(list.length<3)continue;
-    let sw=0,sz=0;
-    for(const j of list){
-      const d=Math.hypot(S.loc[i].x-S.loc[j].x,S.loc[i].y-S.loc[j].y)||0.001;
-      const w=1/d;sw+=w;sz+=w*S.act[j].z;
-    }
-    const pred=sz/sw,off=S.act[i].z-pred;
-    if(Math.abs(off)>tol)S.flags.push({i,off});
-  }
-  S.flags.sort((a,b)=>Math.abs(b.off)-Math.abs(a.off));
 }
 // Segments are stitched together by the triangle edge each crossing sits on, so
 // the join is exact — no coordinate rounding, no gaps at the seams.
@@ -849,6 +882,7 @@ function draw(){
   const w=cv.clientWidth,h=cv.clientHeight;
   ctx.clearRect(0,0,w,h);
   if(!S.tin){return;}
+  if(S.view3d){draw3D(w,h);return;}
   // triangles
   if($('lTri').checked){
     ctx.strokeStyle=CSS('--pen-tin');ctx.lineWidth=0.6;ctx.beginPath();
@@ -934,13 +968,102 @@ function draw(){
     ctx.beginPath();ctx.moveTo(sx-3,sy-3);ctx.lineTo(sx+3,sy+3);
     ctx.moveTo(sx+3,sy-3);ctx.lineTo(sx-3,sy+3);ctx.strokeStyle='#B9BEC6';ctx.lineWidth=1;ctx.stroke();
   }
-  // flags
-  if($('lFlag').checked){
-    ctx.strokeStyle=CSS('--pen-flag');ctx.lineWidth=1.4;
-    for(const f of S.flags.slice(0,60)){
-      const p=S.loc[f.i];ctx.beginPath();ctx.arc(X(p),Y(p),5,0,6.283);ctx.stroke();
+}
+
+/* ══════════════ 3D orbit view ══════════════ */
+// Hand-rolled orthographic orbit: rotate each vertex by azimuth (about up) then
+// pitch by elevation, shade faces by a fixed overhead sun plus a hypsometric tint,
+// and paint them back-to-front. No libraries — keeps the tool one offline file.
+function terrainRamp(t){                      // t 0..1 low→high → [r,g,b]
+  const s=[[46,110,90],[92,132,74],[176,150,74],[150,110,80],[225,222,214]];
+  t=Math.max(0,Math.min(0.999,t))*(s.length-1);
+  const i=Math.floor(t),f=t-i,a=s[i],b=s[i+1];
+  return [a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f,a[2]+(b[2]-a[2])*f];
+}
+function proj3D(w,h){
+  let mnx=1/0,mxx=-1/0,mny=1/0,mxy=-1/0,mnz=1/0,mxz=-1/0;
+  for(let i=0;i<S.act.length;i++){const p=S.loc[i],z=S.act[i].z;
+    if(p.x<mnx)mnx=p.x;if(p.x>mxx)mxx=p.x;if(p.y<mny)mny=p.y;if(p.y>mxy)mxy=p.y;
+    if(z<mnz)mnz=z;if(z>mxz)mxz=z;}
+  const cx=(mnx+mxx)/2,cy=(mny+mxy)/2,cz=(mnz+mxz)/2;
+  const span=Math.max(mxx-mnx,mxy-mny)||1;
+  const vex=Math.max(0.2,parseFloat($('vex').value)||1);
+  const az=S.orbit.az*Math.PI/180, el=S.orbit.el*Math.PI/180;
+  const ca=Math.cos(az),sa=Math.sin(az),ce=Math.cos(el),se=Math.sin(el);
+  const scale=Math.min(w,h)/span*0.92*S.orbit.zoom;
+  const ox=w/2+S.orbit.px, oy=h/2+Math.min(w,h)*0.04+S.orbit.py;
+  const put=(x,y,z)=>{                        // model (local x,y ; z elev) → screen + depth
+    const Xr=x-cx, Yr=y-cy, Zr=(z-cz)*vex;
+    const ex=Xr*ca-Yr*sa, ey=Xr*sa+Yr*ca, ez=Zr;
+    const up=ey*se+ez*ce, depth=ey*ce-ez*se;
+    return {sx:ox+ex*scale, sy:oy-up*scale, depth};
+  };
+  return {put,mnz,mxz,vex};
+}
+function draw3D(w,h){
+  const {put,mnz,mxz,vex}=proj3D(w,h);
+  const V=new Array(S.act.length);
+  for(let i=0;i<S.act.length;i++){const p=S.loc[i];V[i]=put(p.x,p.y,S.act[i].z);}
+  // gather kept faces with average depth for the painter's sort
+  const dz=(mxz-mnz)||1, light=[0.35,0.45,0.82], faces=[];
+  S.tin.tris.forEach((t,i)=>{
+    if(!S.keep.has(i))return;
+    const A=S.loc[t[0]],B=S.loc[t[1]],C=S.loc[t[2]];
+    const za=S.act[t[0]].z,zb=S.act[t[1]].z,zc=S.act[t[2]].z;
+    // normal in model space (z exaggerated to match the view)
+    const ux=B.x-A.x,uy=B.y-A.y,uz=(zb-za)*vex, vx=C.x-A.x,vy=C.y-A.y,vz=(zc-za)*vex;
+    let nx=uy*vz-uz*vy, ny=uz*vx-ux*vz, nz=ux*vy-uy*vx;
+    if(nz<0){nx=-nx;ny=-ny;nz=-nz;}
+    const nl=Math.hypot(nx,ny,nz)||1; nx/=nl;ny/=nl;nz/=nl;
+    const lit=Math.max(0,nx*light[0]+ny*light[1]+nz*light[2]), sh=0.42+0.58*lit;
+    const zavg=(za+zb+zc)/3, c=terrainRamp((zavg-mnz)/dz);
+    faces.push({t,depth:(V[t[0]].depth+V[t[1]].depth+V[t[2]].depth)/3,
+      col:'rgb('+(c[0]*sh|0)+','+(c[1]*sh|0)+','+(c[2]*sh|0)+')'});
+  });
+  faces.sort((a,b)=>b.depth-a.depth);         // far first
+  ctx.lineJoin='round';
+  const wire=$('lTri').checked;
+  for(const f of faces){
+    const a=V[f.t[0]],b=V[f.t[1]],c=V[f.t[2]];
+    ctx.beginPath();ctx.moveTo(a.sx,a.sy);ctx.lineTo(b.sx,b.sy);ctx.lineTo(c.sx,c.sy);ctx.closePath();
+    ctx.fillStyle=f.col;ctx.fill();
+    if(wire){ctx.strokeStyle='rgba(20,26,34,0.28)';ctx.lineWidth=0.5;ctx.stroke();}
+  }
+  // breaklines draped on the surface
+  if($('lBrk').checked){
+    ctx.strokeStyle=CSS('--pen-break');ctx.lineWidth=2;
+    for(const bk of S.brk){
+      if(!bk.on)continue;ctx.beginPath();let st=false;
+      for(const id of bk.ids){const i=S.idx.get(id);if(i===undefined){st=false;continue;}
+        const v=V[i];st?ctx.lineTo(v.sx,v.sy):ctx.moveTo(v.sx,v.sy);st=true;}
+      ctx.stroke();
     }
   }
+  // contours draped at their own elevation
+  if($('lCon').checked){
+    ctx.strokeStyle=CSS('--pen-contour');
+    for(const cc of S.contours){
+      ctx.lineWidth=cc.major?1.4:0.6;ctx.globalAlpha=cc.major?0.95:0.5;
+      for(const L of cc.lines){
+        ctx.beginPath();L.forEach((p,k)=>{const v=put(p.x,p.y,cc.z);k?ctx.lineTo(v.sx,v.sy):ctx.moveTo(v.sx,v.sy);});ctx.stroke();
+      }
+    }
+    ctx.globalAlpha=1;
+  }
+}
+function ptInTri(px,py,ax,ay,bx,by,cx,cy){
+  const d=(by-cy)*(ax-cx)+(cx-bx)*(ay-cy);if(!d)return false;
+  const a=((by-cy)*(px-cx)+(cx-bx)*(py-cy))/d;
+  const b=((cy-ay)*(px-cx)+(ax-cx)*(py-cy))/d;
+  return a>=0&&b>=0&&a+b<=1;
+}
+function nearTri(sx,sy){                       // kept triangle under the cursor (plan view)
+  for(let i=0;i<S.tin.tris.length;i++){
+    if(!S.keep.has(i))continue;const t=S.tin.tris[i];
+    const a=S.loc[t[0]],b=S.loc[t[1]],c=S.loc[t[2]];
+    if(ptInTri(sx,sy,X(a),Y(a),X(b),Y(b),X(c),Y(c)))return i;
+  }
+  return -1;
 }
 
 /* ══════════════ stats & tables ══════════════ */
@@ -984,11 +1107,10 @@ function tables(){
   // points
   const f=$('pfilter').value.trim().toUpperCase();
   const rows=S.raw.filter(p=>!f||p.code.includes(f)||p.id.includes(f)).slice(0,400);
-  const flagged=new Set(S.flags.map(x=>S.act[x.i].id));
   const tb=$('ptbody');tb.innerHTML='';
   for(const p of rows){
     const tr=document.createElement('tr');
-    tr.className=(p.use?'':'off ')+(flagged.has(p.id)?'flag':'');
+    tr.className=p.use?'':'off';
     tr.innerHTML='<td>'+p.id+'</td><td><span class="swatch" style="background:'+codeColor(p.code)+
       '"></span>'+p.code+'</td><td class="num">'+p.z.toFixed(3)+'</td>';
     const td=document.createElement('td');td.className='num';
@@ -1013,18 +1135,6 @@ function tables(){
     del.onclick=()=>{pushUndo();S.brk.splice(i,1);rebuild();};t2.append(del);
     tr.append(t1,t2);bb.append(tr);
   });
-  // flags
-  const fb=$('flagbody');fb.innerHTML='';
-  for(const fl of S.flags.slice(0,25)){
-    const p=S.act[fl.i];
-    const tr=document.createElement('tr');
-    tr.innerHTML='<td>'+p.id+'</td><td>'+p.code+'</td><td class="num">'+p.z.toFixed(3)+
-      '</td><td class="num" style="color:var(--pen-flag)">'+(fl.off>0?'+':'')+fl.off.toFixed(3)+'</td>';
-    tr.onclick=()=>{S.view.s=Math.max(S.view.s,6);
-      S.view.ox=S.loc[fl.i].x-cv.clientWidth/2/S.view.s;
-      S.view.oy=S.loc[fl.i].y+cv.clientHeight/2/S.view.s;draw();};
-    fb.append(tr);
-  }
 }
 
 /* ══════════════ breaklines ══════════════ */
@@ -1094,9 +1204,10 @@ function nearBrk(sx,sy,tol){
 }
 
 /* ══════════════ interaction ══════════════ */
-let drag=null;
+let drag=null, odrag=null;
 cv.addEventListener('pointerdown',e=>{
   const r=cv.getBoundingClientRect(),sx=e.clientX-r.left,sy=e.clientY-r.top;
+  if(S.view3d){odrag={sx,sy,az:S.orbit.az,el:S.orbit.el,px:S.orbit.px,py:S.orbit.py,pan:e.shiftKey||e.button===1};cv.setPointerCapture(e.pointerId);return;}
   if(S.tool==='pan'||e.button===1){drag={sx,sy,ox:S.view.ox,oy:S.view.oy};cv.setPointerCapture(e.pointerId);return;}
   if(!S.tin)return;
   if(S.tool==='break'){
@@ -1129,7 +1240,7 @@ cv.addEventListener('pointerdown',e=>{
     if(i<0){msg('No point within reach',true);return;}
     pushUndo();
     S.raw[i].use=!S.raw[i].use;
-    msg('Point '+S.raw[i].id+(S.raw[i].use?' back in the surface':' left out of the surface'));
+    msg('Point '+S.raw[i].id+(S.raw[i].use?' back in the surface':' excluded from the surface'));
     rebuild();
   }
   else if(S.tool==='delbrk'){
@@ -1153,24 +1264,55 @@ cv.addEventListener('pointerdown',e=>{
     rebuild();
     msg('Point '+id+' deleted from the file');
   }
+  else if(S.tool==='deledge'){
+    const hit=nearEdge(sx,sy,9);
+    if(!hit){msg('No triangle edge within reach',true);return;}
+    const [a,b]=hit;
+    const rem=[];                              // triangles sharing this edge (2 inside, 1 on the boundary)
+    S.tin.tris.forEach((t,i)=>{if(S.keep.has(i)&&t.includes(a)&&t.includes(b))rem.push(t);});
+    if(!rem.length){msg('No triangle on that edge',true);return;}
+    pushUndo();
+    rem.forEach(t=>S.delTri.add(triIdKey(t)));
+    trim();findHull();makeContours();draw();stats();
+    msg(rem.length>1?'Edge removed — both triangles it split are taken out':'Boundary edge removed — its triangle is taken out');
+  }
 });
 cv.addEventListener('pointermove',e=>{
   const r=cv.getBoundingClientRect(),sx=e.clientX-r.left,sy=e.clientY-r.top;
+  if(odrag){
+    if(odrag.pan){
+      S.orbit.px=odrag.px+(sx-odrag.sx);
+      S.orbit.py=odrag.py+(sy-odrag.sy);
+    }else{
+      S.orbit.az=odrag.az+(sx-odrag.sx)*0.45;
+      S.orbit.el=Math.max(4,Math.min(89,odrag.el+(sy-odrag.sy)*0.35));
+    }
+    draw();return;
+  }
   if(drag){
     S.view.ox=drag.ox-(sx-drag.sx)/S.view.s;
     S.view.oy=drag.oy+(sy-drag.sy)/S.view.s;
     draw();return;
   }
+  if(S.view3d)return;
   const lx=invX(sx),ly=invY(sy);
   $('rE').textContent=fmt(lx+S.org.e,3);$('rN').textContent=fmt(ly+S.org.n,3);
   const i=S.act.length?nearPoint(sx,sy,14):-1;
   if(i>=0){$('rZ').textContent=S.act[i].z.toFixed(3);$('rP').textContent=S.act[i].id+' · '+S.act[i].code;}
   else{$('rZ').textContent='—';$('rP').textContent='—';}
 });
-addEventListener('pointerup',()=>{drag=null;});
+addEventListener('pointerup',()=>{drag=null;odrag=null;});
 cv.addEventListener('wheel',e=>{
   e.preventDefault();
   const r=cv.getBoundingClientRect(),sx=e.clientX-r.left,sy=e.clientY-r.top;
+  if(S.view3d){
+    const base=Math.min(cv.clientWidth,cv.clientHeight)*0.04;
+    const oldz=S.orbit.zoom, nz=Math.max(0.2,Math.min(40,oldz*(e.deltaY<0?1.15:1/1.15))), k=nz/oldz;
+    const Ox=cv.clientWidth/2+S.orbit.px, Oy=cv.clientHeight/2+base+S.orbit.py;
+    S.orbit.px=(sx-(sx-Ox)*k)-cv.clientWidth/2;      // keep the point under the cursor fixed
+    S.orbit.py=(sy-(sy-Oy)*k)-(cv.clientHeight/2+base);
+    S.orbit.zoom=nz;draw();return;
+  }
   const wx=invX(sx),wy=invY(sy);
   S.view.s*=e.deltaY<0?1.15:1/1.15;
   S.view.ox=wx-sx/S.view.s;S.view.oy=wy+sy/S.view.s;
@@ -1180,26 +1322,48 @@ addEventListener('keydown',e=>{
   if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return;
   if(e.key==='Enter'&&S.tool==='break')finishDraft();
   if(e.key==='Escape'){S.draft=[];draw();msg('Breakline abandoned');}
-  if(e.key==='z'&&(e.ctrlKey||e.metaKey))undo();
+  if((e.key==='z'||e.key==='Z')&&(e.ctrlKey||e.metaKey)){e.preventDefault();e.shiftKey?redo():undo();}
+  if((e.key==='y'||e.key==='Y')&&(e.ctrlKey||e.metaKey)){e.preventDefault();redo();}
 });
-/* ── undo: snapshot the editable state before every change ── */
-const UNDO=[];
-function pushUndo(){
-  UNDO.push({
+/* ── undo / redo: snapshot the editable state around every change ── */
+const UNDO=[],REDO=[];
+function snapState(){
+  return {
     raw:S.raw.map(p=>({...p})),
     brk:S.brk.map(b=>({...b,ids:[...b.ids]})),
     swaps:S.swaps.map(x=>({...x})),
-  });
-  if(UNDO.length>50)UNDO.shift();
+    delTri:[...S.delTri],
+  };
 }
-function clearUndo(){UNDO.length=0;}
+function applyState(u){S.raw=u.raw;S.brk=u.brk;S.swaps=u.swaps;S.delTri=new Set(u.delTri||[]);rebuild();}
+function updateUR(){
+  const u=$('btnUndo'),r=$('btnRedo');
+  if(u)u.disabled=!UNDO.length;
+  if(r)r.disabled=!REDO.length;
+}
+function pushUndo(){                                     // call BEFORE a mutation
+  UNDO.push(snapState());
+  if(UNDO.length>50)UNDO.shift();
+  REDO.length=0;                                         // a fresh edit invalidates redo
+  updateUR();
+}
+function clearUndo(){UNDO.length=0;REDO.length=0;updateUR();}
 function undo(){
   if(S.draft.length){S.draft.pop();draw();return;}      // still drawing: step back a point
   const u=UNDO.pop();
   if(!u){msg('Nothing left to undo');return;}
-  S.raw=u.raw;S.brk=u.brk;S.swaps=u.swaps;
-  rebuild();
+  REDO.push(snapState());
+  applyState(u);
+  updateUR();
   msg('Edit undone');
+}
+function redo(){
+  const r=REDO.pop();
+  if(!r){msg('Nothing left to redo');return;}
+  UNDO.push(snapState());
+  applyState(r);
+  updateUR();
+  msg('Edit redone');
 }
 
 /* ══════════════ export ══════════════ */
@@ -1248,14 +1412,22 @@ function exportDXF(){
   if(!S.tin)return;
   const {faces}=usedFaces();
   const o=[];const g=(c,v)=>{o.push(c,v)};
+  const safe=s=>s.replace(/[^A-Z0-9_-]/gi,'_');
   // text height scaled to the survey extent
   let mnx=Infinity,mxx=-Infinity,mny=Infinity,mxy=-Infinity;
   for(const p of S.act){mnx=Math.min(mnx,p.e);mxx=Math.max(mxx,p.e);mny=Math.min(mny,p.n);mxy=Math.max(mxy,p.n);}
   const diag=Math.hypot(mxx-mnx,mxy-mny)||100, th=Math.max(0.25,diag/320), off=th*0.6;
-  const safe=s=>s.replace(/[^A-Z0-9_-]/gi,'_');
-  // layer table so everything lands on named, coloured layers
+  // build contours at the chosen interval so they ride out in the same file
+  makeContours(true);
+  const iv=parseFloat($('cint').value)||0.5;
+  const ivtag=iv.toFixed(1).replace('.','P');
+  const dec=(iv*5)%1===0?0:1;                          // label to the precision the index needs
+  const cth=Math.max(0.15,diag*2/300);                 // contour label height
+  // layer table so everything lands on named, coloured layers to sort out in CAD
   const layers=[['SURV-POINTS',7],['SURV-LEVELS',3],['SURV-CODES',4],['TIN-TRIANGLES',8]];
   for(const b of S.brk) if(b.on) layers.push(['BRK-'+safe(b.name),1]);
+  if(S.contours.length)
+    layers.push(['CONT-INDEX-'+ivtag,30],['CONT-MINOR-'+ivtag,42],['CONT-TEXT',2]);
   g(0,'SECTION');g(2,'TABLES');g(0,'TABLE');g(2,'LAYER');g(70,layers.length);
   for(const [nm,col] of layers){g(0,'LAYER');g(2,nm);g(70,'0');g(62,col);g(6,'CONTINUOUS');}
   g(0,'ENDTAB');g(0,'ENDSEC');
@@ -1281,26 +1453,12 @@ function exportDXF(){
     for(const i of pts){const p=S.act[i];g(0,'VERTEX');g(8,'BRK-'+safe(b.name));g(70,'32');g(10,p.e.toFixed(4));g(20,p.n.toFixed(4));g(30,p.z.toFixed(4));}
     g(0,'SEQEND');
   }
-  g(0,'ENDSEC');g(0,'EOF');
-  let s='';for(let i=0;i<o.length;i+=2)s+=String(o[i]).padStart(3,' ')+'\n'+o[i+1]+'\n';
-  save(($('sname').value.trim()||'EG-FIELD')+'.dxf',s,'application/dxf');
-  msg('DXF written — '+faces.length+' triangles, '+S.act.length+' points with levels + codes, on layers');
-}
-function exportContours(){
-  if(!S.tin)return;
-  makeContours(true);
-  if(!S.contours.length){msg('No contours at this interval — check the elevation range',true);return;}
-  const iv=parseFloat($('cint').value)||0.5;
-  const dec=(iv*5)%1===0?0:1;                        // label to the precision the index contour needs
-  let ew=0,en=0;for(const p of S.loc){ew=Math.max(ew,Math.abs(p.x));en=Math.max(en,Math.abs(p.y));}
-  const th=Math.max(0.15,Math.max(ew,en)*2/300);      // text sized to the job, not the interval
-  const o=[],g=(c,v)=>o.push(c,v);
-  g(0,'SECTION');g(2,'ENTITIES');
-  let n=0;
+  // contours — index heavy on its own layer, minor on its own, one label per index string
+  let nc=0;
   for(const c of S.contours){
-    const lay=(c.major?'CONT-INDEX-':'CONT-MINOR-')+iv.toFixed(1).replace('.','P');
+    const lay=(c.major?'CONT-INDEX-':'CONT-MINOR-')+ivtag;
     for(const L of c.lines){
-      if(L.length<2)continue;n++;
+      if(L.length<2)continue;nc++;
       g(0,'POLYLINE');g(8,lay);g(66,'1');g(70,'8');
       g(10,'0');g(20,'0');g(30,c.z.toFixed(4));
       for(const p of L){
@@ -1309,27 +1467,27 @@ function exportContours(){
       }
       g(0,'SEQEND');g(8,lay);
     }
-    if(c.major&&c.lines.length){                     // one elevation label per index contour
+    if(c.major&&c.lines.length){                       // one elevation label per index contour
       const L=c.lines.reduce((a,b)=>b.length>a.length?b:a);
       const p=L[Math.floor(L.length/2)],q=L[Math.min(L.length-1,Math.floor(L.length/2)+1)];
       const ang=Math.atan2(q.y-p.y,q.x-p.x)*180/Math.PI;
       g(0,'TEXT');g(8,'CONT-TEXT');
       g(10,(p.x+S.org.e).toFixed(4));g(20,(p.y+S.org.n).toFixed(4));g(30,c.z.toFixed(4));
-      g(40,th.toFixed(3));g(1,c.z.toFixed(dec));
+      g(40,cth.toFixed(3));g(1,c.z.toFixed(dec));
       g(50,(ang>90||ang<-90?ang+180:ang).toFixed(2));g(72,'1');g(73,'2');
       g(11,(p.x+S.org.e).toFixed(4));g(21,(p.y+S.org.n).toFixed(4));g(31,c.z.toFixed(4));
     }
   }
+  if(!$('lCon').checked)S.contours=[];                 // don't leave contours on screen if they weren't shown
   g(0,'ENDSEC');g(0,'EOF');
   let s='';for(let i=0;i<o.length;i+=2)s+=String(o[i]).padStart(3,' ')+'\n'+o[i+1]+'\n';
-  save(($('sname').value.trim()||'EG-FIELD')+'-CONT-'+iv+'m.dxf',s,'application/dxf');
-  msg(n+' contour polylines written at '+iv+' m, index every '+(iv*5).toFixed(1)+' m');
-  if(!$('lCon').checked)S.contours=[];
+  save(($('sname').value.trim()||'EG-FIELD')+'.dxf',s,'application/dxf');
+  msg('DXF written — '+faces.length+' triangles, '+S.act.length+' points, '+nc+' contour lines at '+iv+' m, on layers');
 }
 function exportProject(){
   const j={v:2,file:S.file,fmt:$('fmt').value,sname:$('sname').value,
-    maxEdgePct:S.maxEdgePct,cint:$('cint').value,ztol:$('ztol').value,
-    raw:S.raw,brk:S.brk,swaps:S.swaps};
+    maxEdgePct:S.maxEdgePct,cint:$('cint').value,
+    raw:S.raw,brk:S.brk,swaps:S.swaps,delTri:[...S.delTri]};
   save((S.file.replace(/\.[^.]+$/,'')||'tin')+'-work.json',JSON.stringify(j),'application/json');
   msg('Working file saved — reopen it here to carry on');
 }
@@ -1337,7 +1495,8 @@ function importProject(t){
   const j=JSON.parse(t);
   S.raw=j.raw;S.brk=j.brk||[];S.file=j.file||'';clearUndo();
   S.swaps=(j.swaps||[]).filter(s=>s&&s.p!==undefined);   // v1 swaps had no old diagonal, drop them
-  $('sname').value=j.sname||'EG-FIELD';$('cint').value=j.cint||0.5;$('ztol').value=j.ztol||0.5;
+  S.delTri=new Set(j.delTri||[]);
+  $('sname').value=j.sname||'EG-FIELD';$('cint').value=j.cint||0.5;
   S.maxEdgePct=j.maxEdgePct??100;$('maxEdge').value=S.maxEdgePct;
   $('fname').textContent=S.file+' · '+S.raw.length+' points';
   $('drop').classList.add('hide');
@@ -1346,8 +1505,12 @@ function importProject(t){
 
 /* ══════════════ sample ══════════════ */
 function sample(){
-  // A 240 m road in shallow cut, shot as strings: centreline, edge of kerb,
-  // kerb invert, batter toe, top of batter — left and right coded separately.
+  // A deterministic 240 m road in shallow cut, shot as strings: centreline, edge of
+  // kerb, kerb invert, batter toe, top of batter — left and right coded separately.
+  // Several DELIBERATE defects are planted for the walkthrough; see the NOTE lines.
+  let seed=20260726;                       // fixed seed → identical sample every load
+  const rnd=()=>{seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);
+    t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};
   const L=[];let id=1000;
   const E0=512340.000,N0=8712500.000;
   const ground=(e,n)=>1204.500-0.020*(e-E0)+0.008*(n-N0)+0.60*Math.sin((e-E0)/60);
@@ -1359,7 +1522,10 @@ function sample(){
     put(c.e,c.n,zCL,'CL');
     for(const s of [-1,1]){
       const sd=s<0?'L':'R';
-      put(c.e,c.n+s*3.5,zEK,'EK'+sd);
+      // NOTE defect D — mis-coded kerb: three right-side kerb shots at ch 96–112 were
+      // left coded SPOT instead of EKR, so the chained EKR string has a gap there.
+      const ekCode=(sd==='R'&&ch>=96&&ch<=112)?'SPOT':'EK'+sd;
+      put(c.e,c.n+s*3.5,zEK,ekCode);
       put(c.e,c.n+s*4.0,zIL,'IL'+sd);
       put(c.e,c.n+s*5.0,zIL,'TOE'+sd);
       let off=5.0;                       // daylight the 1:2 batter onto the ground
@@ -1368,12 +1534,27 @@ function sample(){
     }
   }
   for(let i=0;i<170;i++){                // random ground shots clear of the corridor
-    const e=E0-15+Math.random()*270, n=N0-60+Math.random()*130;
+    const e=E0-15+rnd()*270, n=N0-60+rnd()*130;
     if(Math.abs(n-cl(e-E0).n)<16)continue;
-    put(e,n,ground(e,n)+(Math.random()-0.5)*0.06,'SPOT');
+    put(e,n,ground(e,n)+(rnd()-0.5)*0.06,'SPOT');
   }
-  const blunder=L.findIndex(r=>r[4]==='TOPL'&&r[0]>1050);
-  L[blunder][3]=(parseFloat(L[blunder][3])+1.85).toFixed(3);  // rod height left wrong
+  // ── planted defects for the walkthrough ─────────────────────────────────────
+  // NOTE defect A — rod-height blunder: one TOP shot near ch 120 reads 1.80 m high.
+  // It hides in the points list, but turn on Contours and it throws a tight bullseye;
+  // fix by unticking it under Edit Surface > Points, or with the Remove point tool.
+  const b=L.findIndex(r=>r[4]==='TOPR'&&Math.abs(parseFloat(r[2])-(E0+120))<4);
+  if(b>=0)L[b][3]=(parseFloat(L[b][3])+1.80).toFixed(3);
+  // NOTE defect B — mis-keyed easting: one ground shot was typed ~75 m east of where
+  // it was taken, dragging a long sliver triangle across the whole job. Fix with the
+  // Remove point tool (it's bad data), or sweep it out with the Triangles trim slider.
+  put(E0+315,N0+102,ground(E0+240,N0+102),'SPOT');
+  // NOTE defect C — channel not held: the IL invert strings are shot but are not yet
+  // breaklines, so the low-flow line triangulates flat/across the road. Chain ILL and
+  // ILR under Edit Surface > Codes; use Swap edge for any diagonal that still bridges it.
+  // NOTE defect D (cont.) — draw the missing kerb across the gap with Draw breakline,
+  // clicking the three SPOT points between ch 88 and ch 120 on the right kerb.
+  // NOTE defect E — ragged boundary: the scatter leaves long edge triangles; pull the
+  // outline back to the surveyed extent with Edit Surface > Triangles > trim slider.
   return L.map(r=>r.join(',')).join('\n');
 }
 
@@ -1381,32 +1562,50 @@ function sample(){
 $('btnOpen').onclick=()=>$('file').click();
 $('file').onchange=e=>{const f=e.target.files[0];if(!f)return;
   const r=new FileReader();r.onload=()=>loadPoints(r.result,f.name);r.readAsText(f);};
-$('btnSample').onclick=$('btnSample2').onclick=()=>{$('fmt').value='pnezd';$('sep').value=',';loadPoints(sample(),'SAMPLE-ROAD.txt');};
+$('btnSample').onclick=()=>{$('fmt').value='pnezd';$('sep').value=',';loadPoints(sample(),'SAMPLE-ROAD.txt');};
 $('btnLoadPrj').onclick=()=>$('prjfile').click();
 $('prjfile').onchange=e=>{const f=e.target.files[0];if(!f)return;
   const r=new FileReader();r.onload=()=>{try{importProject(r.result)}catch(x){msg('That file is not a TIN Solver working file',true)}};r.readAsText(f);};
 document.querySelectorAll('.tool').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('.tool').forEach(x=>x.classList.remove('on'));
-  b.classList.add('on');S.tool=b.dataset.tool;S.draft=[];draw();
+  b.classList.add('on');S.tool=b.dataset.tool;S.draft=[];
+  if(S.view3d)set3D(false);          // picking an edit tool drops back to plan view
+  draw();
   cv.style.cursor=S.tool==='pan'?'grab':'crosshair';
   msg({pan:'Drag to pan, wheel to zoom',
        break:'Click points in order, Enter to finish',
        swap:'Click a triangle edge to swap the diagonal — click a swapped edge again to put it back',
-       off:'Click a point to leave it out of the surface, click again to bring it back',
+       off:'Click a point to exclude it from the surface, click again to bring it back',
        delbrk:'Click a breakline to delete it — the points stay, only the string goes',
-       delpt:'Click a point to delete it from the file — Undo puts it back'}[S.tool]);
+       delpt:'Click a point to delete it from the file — Undo puts it back',
+       deledge:'Click a triangle edge to remove the triangles it touches — Undo puts them back'}[S.tool]);
 });
-$('btnZoomAll').onclick=zoomAll;
+function set3D(on){
+  S.view3d=on;
+  if(on){S.orbit.px=0;S.orbit.py=0;}
+  $('btn3D').classList.toggle('on',on);
+  $('btn3D').textContent=on?'Plan':'3D';
+  cv.style.cursor=on?'grab':(S.tool==='pan'?'grab':'crosshair');
+  msg(on?'3D orbit — drag to rotate, wheel to zoom to the cursor, Shift-drag to pan, Z scale sets exaggeration':'Back to plan view');
+  draw();
+}
+$('btn3D').onclick=()=>set3D(!S.view3d);
+$('vex').onchange=()=>{if(S.view3d)draw();};
 $('btnUndo').onclick=undo;
+$('btnRedo').onclick=redo;
+updateUR();
+document.querySelectorAll('.panel section>h2').forEach(h=>
+  h.addEventListener('click',()=>h.parentElement.classList.toggle('collapsed')));
+document.querySelectorAll('.panel .sub>h3').forEach(h=>
+  h.addEventListener('click',()=>h.parentElement.classList.toggle('collapsed')));
 $('maxEdge').oninput=e=>{S.maxEdgePct=+e.target.value;trim();findHull();makeContours();draw();stats();};
-$('cint').onchange=()=>{$('ivLbl').textContent=$('cint').value;makeContours();draw();};
-$('ztol').oninput=()=>{findFlags();draw();tables();};
+$('cint').onchange=()=>{makeContours();draw();};
 $('pfilter').oninput=tables;
-['lTri','lBrk','lPts','lLab','lFlag'].forEach(k=>$(k).onchange=draw);
+['lTri','lBrk','lPts','lLab'].forEach(k=>$(k).onchange=draw);
 $('lCon').onchange=()=>{makeContours();draw();};
 $('cSmooth').onchange=()=>{makeContours();draw();};
 $('exLX').onclick=exportLandXML;$('exDXF').onclick=exportDXF;
-$('exCON').onclick=exportContours;$('exPRJ').onclick=exportProject;
+$('exPRJ').onclick=exportProject;
 const dz=$('drop');
 ['dragenter','dragover'].forEach(t=>dz.addEventListener(t,e=>{e.preventDefault();dz.classList.add('over')}));
 ['dragleave','drop'].forEach(t=>dz.addEventListener(t,e=>{e.preventDefault();dz.classList.remove('over')}));
