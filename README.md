@@ -125,5 +125,4 @@ it fixed.
 
 ---
 
-*Built for surveyors and civil engineers who want a fast, free way to build, review and share
-a ground model — without a seat of desktop software.*
+*Built for surveyors and civil engineers who want a fast, free way to build, review and share a ground model—without requiring Civil 3D or other desktop software.*
