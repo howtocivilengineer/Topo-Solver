@@ -10,9 +10,9 @@ offline.
 
 ### ▶ Run it now
 
-[Launch Topo Solver](https://howtocivilengineer.github.io/Topo-Solver/)
+[Launch Topo Solver](https://howtocivilengineer.github.io/Topo-Solver/) (click open in new tab)
 
-Open the link, drop a file on the page, and go. Works on desktop and mobile, but desktop is recommended).
+Open the link, drop a file on the page, and go. Works on desktop and mobile, (desktop is recommended).
 
 ---
 
