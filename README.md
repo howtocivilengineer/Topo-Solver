@@ -117,6 +117,17 @@ If you're reporting a bug, including a sample of the points file that caused the
 
 ---
 
+## Disclaimer
+
+TOPO Solver is provided as a free tool to assist with survey data review, terrain modelling, and surface preparation. It is not a replacement for professional surveying, engineering judgement, or certified design software.
+
+The user is responsible for verifying imported data, surface edits, triangulation, contours, and exported files before using them for design, construction, or other engineering decisions.
+
+While every effort has been made to produce accurate results, no guarantee is provided that the software is free from errors or suitable for any specific project. Always check outputs against original survey data and appropriate professional standards.
+
+Use of TOPO Solver is at your own risk. The developer accepts no responsibility for losses, damages, or consequences arising from the use of this software.
+
+---
 ## License
 
 <!-- Add your chosen license here (for example, MIT) and include a LICENSE file in the repo. -->
