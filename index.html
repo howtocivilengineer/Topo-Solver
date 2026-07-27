@@ -135,6 +135,8 @@ input.vex{width:44px;flex:0 0 auto;padding:3px 4px;font-size:11px}
   font-family:var(--stencil);text-transform:uppercase;letter-spacing:.06em;font-size:10px;color:var(--mute)}
 #btn3D.on{background:var(--lcd);color:#0b0f14;border-color:var(--lcd)}
 button.ico{font-size:16px;line-height:1;padding:3px 8px;min-width:30px}
+.unitbtn{color:#ff5a52;border-color:#7a2b28;font-weight:700;letter-spacing:.08em}
+.unitbtn:hover{border-color:#ff5a52;background:#2a1513}
 /* collapsible left-panel sections */
 .panel section>h2{display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none}
 .panel section>h2::after{content:'▾';color:var(--mute);font-size:10px;margin-left:8px}
@@ -188,6 +190,7 @@ a.linkbtn:hover{background:#3D434E}
       <label class="lay"><input type="checkbox" id="lCon">Contours</label>
     </div>
     <div class="hright">
+      <button id="units" class="unitbtn" title="Set the units your file is in (metric / imperial)">METRIC</button>
       <select id="lang" class="langsel" title="Language"><option value="en">EN</option><option value="pt">PT</option><option value="fr">FR</option><option value="es">ES</option></select>
       <span class="tag" id="fname">no file loaded</span>
     </div>
@@ -470,6 +473,7 @@ const S={
   contours:[], hull:[],
   view:{s:1,ox:0,oy:0}, tool:'pan', draft:[],
   view3d:false, orbit:{az:35,el:58,zoom:1,px:0,py:0},
+  units:'m',
   maxEdgePct:100, maxEdgeVal:Infinity, held:0, longest:1
 };
 const $=id=>document.getElementById(id);
@@ -758,7 +762,7 @@ function trim(){
   if(S.delTri.size){                         // drop any triangle the user removed by hand
     S.tin.tris.forEach((t,i)=>{if(S.keep.has(i)&&S.delTri.has(triIdKey(t)))S.keep.delete(i);});
   }
-  $('meLbl').textContent=pct>=100?'(no trim)':fmt(S.maxEdgeVal,1)+' m';
+  $('meLbl').textContent=pct>=100?'(no trim)':fmt(S.maxEdgeVal,1)+' '+U();
 }
 function triIdKey(t){return [S.act[t[0]].id,S.act[t[1]].id,S.act[t[2]].id].sort().join('|');}
 function findHull(){
@@ -1075,7 +1079,7 @@ function stats(){
   $('rEd').textContent=S.swaps.length+S.raw.filter(p=>!p.use).length;
   if(!S.tin){$('sZ').textContent='—';$('sA2').textContent='—';$('sA3').textContent='—';return;}
   let zmin=1/0,zmax=-1/0;for(const p of S.act){zmin=Math.min(zmin,p.z);zmax=Math.max(zmax,p.z);}
-  $('sZ').textContent=fmt(zmin,2)+' – '+fmt(zmax,2);
+  $('sZ').textContent=fmt(zmin,2)+' – '+fmt(zmax,2)+' '+U();
   let a2=0,a3=0;
   S.tin.tris.forEach((t,i)=>{
     if(!S.keep.has(i))return;
@@ -1085,8 +1089,9 @@ function stats(){
     const vx=C.x-A.x,vy=C.y-A.y,vz=S.act[t[2]].z-S.act[t[0]].z;
     a3+=Math.hypot(uy*vz-uz*vy,uz*vx-ux*vz,ux*vy-uy*vx)/2;
   });
-  $('sA2').textContent=a2>10000?fmt(a2/10000,3)+' ha':fmt(a2,1)+' m²';
-  $('sA3').textContent=a3>10000?fmt(a3/10000,3)+' ha':fmt(a3,1)+' m²';
+  const uc=UNITS[S.units];
+  $('sA2').textContent=a2>uc.per?fmt(a2/uc.per,3)+' '+uc.aUnit:fmt(a2,1)+' '+uc.lab+'²';
+  $('sA3').textContent=a3>uc.per?fmt(a3/uc.per,3)+' '+uc.aUnit:fmt(a3,1)+' '+uc.lab+'²';
   tables();
 }
 function tables(){
@@ -1482,11 +1487,11 @@ function exportDXF(){
   g(0,'ENDSEC');g(0,'EOF');
   let s='';for(let i=0;i<o.length;i+=2)s+=String(o[i]).padStart(3,' ')+'\n'+o[i+1]+'\n';
   save(($('sname').value.trim()||'EG-FIELD')+'.dxf',s,'application/dxf');
-  msg('DXF written — '+faces.length+' triangles, '+S.act.length+' points, '+nc+' contour lines at '+iv+' m, on layers');
+  msg('DXF written — '+faces.length+' triangles, '+S.act.length+' points, '+nc+' contour lines at '+iv+' '+U()+', on layers');
 }
 function exportProject(){
   const j={v:2,file:S.file,fmt:$('fmt').value,sname:$('sname').value,
-    maxEdgePct:S.maxEdgePct,cint:$('cint').value,
+    maxEdgePct:S.maxEdgePct,cint:$('cint').value,units:S.units,
     raw:S.raw,brk:S.brk,swaps:S.swaps,delTri:[...S.delTri]};
   save((S.file.replace(/\.[^.]+$/,'')||'tin')+'-work.json',JSON.stringify(j),'application/json');
   msg('Working file saved — reopen it here to carry on');
@@ -1496,7 +1501,8 @@ function importProject(t){
   S.raw=j.raw;S.brk=j.brk||[];S.file=j.file||'';clearUndo();
   S.swaps=(j.swaps||[]).filter(s=>s&&s.p!==undefined);   // v1 swaps had no old diagonal, drop them
   S.delTri=new Set(j.delTri||[]);
-  $('sname').value=j.sname||'EG-FIELD';$('cint').value=j.cint||0.5;
+  setUnits(j.units||'m');
+  $('sname').value=j.sname||'EG-FIELD';$('cint').value=j.cint||UNITS[S.units].def;
   S.maxEdgePct=j.maxEdgePct??100;$('maxEdge').value=S.maxEdgePct;
   $('fname').textContent=S.file+' · '+S.raw.length+' points';
   $('drop').classList.add('hide');
@@ -1621,6 +1627,26 @@ resize();
 $('lang').onchange=e=>{applyLang(e.target.value);msg(LASTMSG);};
 let saved='en';try{saved=localStorage.getItem('tinsolver-lang')||'en'}catch(e){}
 $('lang').value=saved;applyLang(saved);
+
+// ── units: metric / imperial. Declares what units the FILE is in — relabels and
+// swaps the contour presets and area units; it does not convert coordinates. ──
+const UNITS={
+  m :{lab:'m', per:10000,aUnit:'ha',def:'0.5',
+      cints:[['0.1','0.1 {u} — detail / flat site'],['0.2','0.2 {u}'],['0.5','0.5 {u}'],['1','1 {u}'],['2','2 {u} — steep ground']]},
+  ft:{lab:'ft',per:43560,aUnit:'ac',def:'2',
+      cints:[['0.5','0.5 {u} — detail / flat site'],['1','1 {u}'],['2','2 {u}'],['5','5 {u}'],['10','10 {u} — steep ground']]}
+};
+function U(){return UNITS[S.units].lab;}
+function setUnits(u){
+  S.units=u;const cfg=UNITS[u],sel=$('cint'),prev=sel.value;
+  sel.innerHTML=cfg.cints.map(([v,t])=>'<option value="'+v+'">'+T(t.replace('{u}',cfg.lab))+'</option>').join('');
+  sel.value=cfg.cints.some(c=>c[0]===prev)?prev:cfg.def;
+  $('units').textContent=u==='ft'?'IMPERIAL':'METRIC';
+  if(S.tin){trim();makeContours();stats();draw();}
+}
+$('units').onclick=()=>{setUnits(S.units==='ft'?'m':'ft');msg('Working in '+(S.units==='ft'?'imperial (ft)':'metric (m)')+' — this labels your data, it does not convert coordinates');};
+setUnits('m');
+
 msg('Open a points file, or load the sample to see how it works');
 </script>
 </body>
