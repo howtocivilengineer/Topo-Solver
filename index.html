@@ -268,6 +268,17 @@ a.linkbtn:hover{background:#3D434E}
         </div>
 
         <div class="sub">
+          <h3>Elevation filter</h3>
+          <label class="f">Keep only ground between <span id="zbLbl">(full range)</span></label>
+          <label class="f" style="margin-top:4px">Lower cut</label>
+          <input type="range" id="zlo" min="0" max="100" value="0">
+          <label class="f">Upper cut</label>
+          <input type="range" id="zhi" min="0" max="100" value="100">
+          <button class="wide" id="zReset">Reset to full range</button>
+          <p class="hint">Slices the surface to a band of levels — pull the lower cut up to drop everything below a level, or the upper cut down to drop everything above it. Triangles are judged on their mid-level, and nothing is deleted: slide back to full range and the ground returns.</p>
+        </div>
+
+        <div class="sub">
           <h3>Contours</h3>
           <label class="f">Contour interval</label>
           <select id="cint">
@@ -474,7 +485,8 @@ const S={
   view:{s:1,ox:0,oy:0}, tool:'pan', draft:[],
   view3d:false, orbit:{az:35,el:58,zoom:1,px:0,py:0},
   units:'m',
-  maxEdgePct:100, maxEdgeVal:Infinity, held:0, longest:1
+  maxEdgePct:100, maxEdgeVal:Infinity, held:0, longest:1,
+  zloPct:0, zhiPct:100, zlo:-Infinity, zhi:Infinity
 };
 const $=id=>document.getElementById(id);
 const cv=$('cv'),ctx=cv.getContext('2d');
@@ -689,7 +701,8 @@ function parse(text){
 function loadPoints(text,name){
   const {out,bad}=parse(text);
   if(!out.length){$('parseMsg').textContent='No points read. Check the column order and separator above.';return;}
-  S.raw=out;S.file=name;S.brk=[];S.swaps=[];S.delTri=new Set();clearUndo();
+  S.raw=out;S.file=name;S.brk=[];S.swaps=[];S.delTri=new Set();
+  S.zloPct=0;S.zhiPct=100;$('zlo').value=0;$('zhi').value=100;clearUndo();
   $('fname').textContent=T(name+' · '+out.length+' points');
   $('parseMsg').textContent=T(bad.length?bad.length+' line(s) skipped — first was: '+bad[0].slice(0,40):
     out.length+' points read, '+new Set(out.map(p=>p.code)).size+' codes.');
@@ -762,6 +775,21 @@ function trim(){
   if(S.delTri.size){                         // drop any triangle the user removed by hand
     S.tin.tris.forEach((t,i)=>{if(S.keep.has(i)&&S.delTri.has(triIdKey(t)))S.keep.delete(i);});
   }
+  // elevation band — cut the surface below/above the chosen levels
+  let zmn=1/0,zmx=-1/0;
+  for(const p of S.act){if(p.z<zmn)zmn=p.z;if(p.z>zmx)zmx=p.z;}
+  if(!isFinite(zmn)){zmn=0;zmx=0;}
+  const rng=(zmx-zmn)||1;
+  S.zlo=zmn+rng*(S.zloPct/100); S.zhi=zmn+rng*(S.zhiPct/100);
+  const banded=S.zloPct>0||S.zhiPct<100;
+  if(banded){
+    S.tin.tris.forEach((t,i)=>{
+      if(!S.keep.has(i))return;
+      const zc=(S.act[t[0]].z+S.act[t[1]].z+S.act[t[2]].z)/3;   // centroid level
+      if(zc<S.zlo||zc>S.zhi)S.keep.delete(i);
+    });
+  }
+  $('zbLbl').textContent=banded?fmt(S.zlo,2)+' – '+fmt(S.zhi,2)+' '+U():'(full range)';
   $('meLbl').textContent=pct>=100?'(no trim)':fmt(S.maxEdgeVal,1)+' '+U();
 }
 function triIdKey(t){return [S.act[t[0]].id,S.act[t[1]].id,S.act[t[2]].id].sort().join('|');}
@@ -1402,16 +1430,19 @@ function exportLandXML(){
     return c.length<2?'':'<Breakline name="'+b.name+'" brkType="standard"><PntList3D>'+c.join(' ')+'</PntList3D></Breakline>';
   }).filter(Boolean);
   const d=new Date().toISOString();
+  const UNI=S.units==='ft'
+    ? '<Imperial linearUnit="foot" areaUnit="squareFoot" volumeUnit="cubicFeet" temperatureUnit="fahrenheit" pressureUnit="inHG" angularUnit="decimal degrees" directionUnit="decimal degrees"/>'
+    : '<Metric linearUnit="meter" areaUnit="squareMeter" volumeUnit="cubicMeter" temperatureUnit="celsius" pressureUnit="milliBars" angularUnit="decimal degrees" directionUnit="decimal degrees"/>';
   const xml='<?xml version="1.0" encoding="UTF-8"?>\n'+
   '<LandXML xmlns="http://www.landxml.org/schema/LandXML-1.2" version="1.2" date="'+d.slice(0,10)+'" time="'+d.slice(11,19)+'">\n'+
-  '<Units><Metric linearUnit="meter" areaUnit="squareMeter" volumeUnit="cubicMeter" temperatureUnit="celsius" pressureUnit="milliBars" angularUnit="decimal degrees" directionUnit="decimal degrees"/></Units>\n'+
-  '<Application name="TIN Solver" version="1.0" desc="Field-built surface, reviewed by the surveyor"/>\n'+
+  '<Units>'+UNI+'</Units>\n'+
+  '<Application name="TOPO Solver" version="1.0" desc="Field-built surface, reviewed by the surveyor"/>\n'+
   '<Surfaces>\n<Surface name="'+nm+'" desc="'+S.file.replace(/"/g,'')+'">\n'+
   (B.length?'<SourceData>\n<Breaklines>\n'+B.join('\n')+'\n</Breaklines>\n</SourceData>\n':'')+
   '<Definition surfType="TIN">\n<Pnts>\n'+P.join('\n')+'\n</Pnts>\n<Faces>\n'+F.join('\n')+'\n</Faces>\n'+
   '</Definition>\n</Surface>\n</Surfaces>\n</LandXML>\n';
   save(nm+'.xml',xml,'application/xml');
-  msg('LandXML written — '+P.length+' points, '+F.length+' faces');
+  msg('LandXML written — '+P.length+' points, '+F.length+' faces, units '+(S.units==='ft'?'imperial (foot)':'metric (meter)'));
 }
 function exportDXF(){
   if(!S.tin)return;
@@ -1491,7 +1522,7 @@ function exportDXF(){
 }
 function exportProject(){
   const j={v:2,file:S.file,fmt:$('fmt').value,sname:$('sname').value,
-    maxEdgePct:S.maxEdgePct,cint:$('cint').value,units:S.units,
+    maxEdgePct:S.maxEdgePct,cint:$('cint').value,units:S.units,zloPct:S.zloPct,zhiPct:S.zhiPct,
     raw:S.raw,brk:S.brk,swaps:S.swaps,delTri:[...S.delTri]};
   save((S.file.replace(/\.[^.]+$/,'')||'tin')+'-work.json',JSON.stringify(j),'application/json');
   msg('Working file saved — reopen it here to carry on');
@@ -1504,6 +1535,7 @@ function importProject(t){
   setUnits(j.units||'m');
   $('sname').value=j.sname||'EG-FIELD';$('cint').value=j.cint||UNITS[S.units].def;
   S.maxEdgePct=j.maxEdgePct??100;$('maxEdge').value=S.maxEdgePct;
+  S.zloPct=j.zloPct??0;S.zhiPct=j.zhiPct??100;$('zlo').value=S.zloPct;$('zhi').value=S.zhiPct;
   $('fname').textContent=S.file+' · '+S.raw.length+' points';
   $('drop').classList.add('hide');
   rebuild();zoomAll();msg('Working file reopened');
@@ -1605,6 +1637,10 @@ document.querySelectorAll('.panel section>h2').forEach(h=>
 document.querySelectorAll('.panel .sub>h3').forEach(h=>
   h.addEventListener('click',()=>h.parentElement.classList.toggle('collapsed')));
 $('maxEdge').oninput=e=>{S.maxEdgePct=+e.target.value;trim();findHull();makeContours();draw();stats();};
+const zBand=()=>{trim();findHull();makeContours();draw();stats();};
+$('zlo').oninput=e=>{S.zloPct=Math.min(+e.target.value,S.zhiPct-1);e.target.value=S.zloPct;zBand();};
+$('zhi').oninput=e=>{S.zhiPct=Math.max(+e.target.value,S.zloPct+1);e.target.value=S.zhiPct;zBand();};
+$('zReset').onclick=()=>{S.zloPct=0;S.zhiPct=100;$('zlo').value=0;$('zhi').value=100;zBand();};
 $('cint').onchange=()=>{makeContours();draw();};
 $('pfilter').oninput=tables;
 ['lTri','lBrk','lPts','lLab'].forEach(k=>$(k).onchange=draw);
