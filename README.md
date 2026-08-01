@@ -18,7 +18,7 @@ Open the link, drop a file on the page, and go. Works on desktop and mobile, (de
 
 ## Video walkthrough
 
-*A full video walkthrough is coming soon.*
+[![Watch the walkthrough](https://img.youtube.com/vi/u1rd0wPj0I8/maxresdefault.jpg)](https://youtu.be/u1rd0wPj0I8)
 
 <!-- Once the video is published, delete the line above and uncomment the block below,
      replacing VIDEO_ID with your YouTube video id (the part after v= or youtu.be/). -->
