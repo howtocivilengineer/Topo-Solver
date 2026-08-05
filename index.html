@@ -305,6 +305,17 @@ a.linkbtn:hover{background:#3D434E}
       <button class="wide" id="exPRJ">Save working file (.json)</button>
       <button class="wide" id="btnLoadPrj">Reopen a working file</button>
       <input type="file" id="prjfile" accept=".json" hidden>
+      <div class="sub" style="border-top:1px dotted #363B44;margin-top:8px">
+        <h3>CAD layers</h3>
+        <button class="wide" id="btnLayDxf">Read layers from a DXF</button>
+        <input type="file" id="layfile" accept=".dxf" hidden>
+        <p class="hint" id="profMsg">Using the built-in layer names.</p>
+        <div id="laymap"></div>
+        <button class="wide" id="btnProfSave">Save layer profile</button>
+        <button class="wide" id="btnProfLoad">Load layer profile</button>
+        <input type="file" id="proffile" accept=".json" hidden>
+        <p class="hint">Drop in any drawing from your office and pick which of its layers each item exports to — the colour comes with it, so a CTB pen table plots correctly. Save the profile and reuse it on every job. A purged drawing has had its empty layers stripped, so use an unpurged template or a live job.</p>
+      </div>
     </section>
 
     <section>
@@ -320,7 +331,7 @@ a.linkbtn:hover{background:#3D434E}
     <section>
       <h2>Help</h2>
       <a class="linkbtn" href="https://github.com/howtocivilengineer/Topo-Solver/blob/main/README.md" target="_blank" rel="noopener">Readme — guide &amp; docs</a>
-      <a class="linkbtn" href="https://www.youtube.com/watch?v=u1rd0wPj0I8" target="_blank" rel="noopener">Video walkthrough</a>
+      <a class="linkbtn" href="https://www.youtube.com/@howtocivilengineer" target="_blank" rel="noopener">Video walkthrough</a>
       <p class="hint">Both open in a new tab.</p>
     </section>
   </div>
@@ -484,7 +495,7 @@ const S={
   contours:[], hull:[],
   view:{s:1,ox:0,oy:0}, tool:'pan', draft:[],
   view3d:false, orbit:{az:35,el:58,zoom:1,px:0,py:0},
-  units:'m',
+  units:'m', prof:null, dxfLayers:[],
   maxEdgePct:100, maxEdgeVal:Infinity, held:0, longest:1,
   zloPct:0, zhiPct:100, zlo:-Infinity, zhi:Infinity
 };
@@ -1236,6 +1247,85 @@ function nearBrk(sx,sy,tol){
   return best;
 }
 
+/* ══════════════ layer profiles ══════════════ */
+// Topo Solver writes 8 kinds of thing. A profile maps each onto an office layer
+// name + ACI colour, read straight from any DXF's LAYER table. Colour matters
+// because in a CTB workflow the layer colour IS the pen selection.
+const LAYDEF={pts:['SURV-POINTS',7],lev:['SURV-LEVELS',3],cod:['SURV-CODES',4],
+  tri:['TIN-TRIANGLES',8],brk:['',1],cix:['CONT-INDEX',30],cmn:['CONT-MINOR',42],ctx:['CONT-TEXT',2]};
+const LAYSLOT=[['pts','Points'],['lev','Levels'],['cod','Feature codes'],['tri','Triangles (TIN)'],
+  ['brk','Breaklines'],['cix','Contours — index'],['cmn','Contours — minor'],['ctx','Contour labels']];
+// name fragments used to pre-pick a sensible layer, so most of the 8 land right
+const LAYHINT={pts:['point','spot-elev','spot','shot'],lev:['spot-elev','elev','level','spot'],cod:['topo.e','anno-topo','code'],
+  tri:['topo-surf','tin','surf','tri'],brk:['brkl','break','topo-surf','surf'],cix:['topo-majr','majr','major','index','indx'],
+  cmn:['topo-min1','min1','minr','minor'],ctx:['majr-anno','cont-anno','topo-anno','anno']};
+const LAYGEOM={tri:1,brk:1,cix:1,cmn:1,pts:1};      // these want geometry layers, not the -Anno twins
+function parseDxfLayers(t){
+  const L=t.split(/\r?\n/).map(s=>s.trim()),out=[];let i=0,inTab=false;
+  while(i<L.length-1){
+    const c=L[i],v=L[i+1];
+    if(c==='2'&&v==='LAYER')inTab=true;
+    else if(c==='0'&&v==='ENDTAB'&&inTab)break;
+    else if(inTab&&c==='0'&&v==='LAYER'){
+      const o={name:'',color:7,lt:'Continuous'};let j=i+2;
+      while(j<L.length-1&&L[j]!=='0'){
+        const k=L[j],w=L[j+1];
+        if(k==='2')o.name=w; else if(k==='62')o.color=Math.abs(+w||7); else if(k==='6')o.lt=w;
+        j+=2;
+      }
+      if(o.name)out.push(o);i=j-2;
+    }
+    i+=2;
+  }
+  return out;
+}
+function pickHint(slot,layers){
+  const geo=LAYGEOM[slot], pool=geo?layers.filter(l=>!/anno/i.test(l.name)):layers;
+  for(const h of LAYHINT[slot]||[]){
+    const m=pool.find(l=>l.name.toLowerCase().includes(h))||(geo?null:undefined);
+    if(m)return m.name;
+  }
+  if(geo)for(const h of LAYHINT[slot]||[]){const m=layers.find(l=>l.name.toLowerCase().includes(h));if(m)return m.name;}
+  return '';
+}
+function buildLayerUI(){
+  const box=$('laymap');
+  if(!S.dxfLayers.length){box.innerHTML='';return;}
+  const opts=n=>'<option value="">— not mapped —</option>'+
+    S.dxfLayers.map(l=>'<option value="'+l.name+'"'+(l.name===n?' selected':'')+'>'+l.name+' ('+l.color+')</option>').join('');
+  box.innerHTML=LAYSLOT.map(([k,lab])=>
+    '<label class="f">'+T(lab)+'</label><select data-slot="'+k+'">'+opts(S.prof&&S.prof[k]?S.prof[k].n:'')+'</select>').join('');
+  box.querySelectorAll('select').forEach(sel=>sel.onchange=()=>{
+    const k=sel.dataset.slot,l=S.dxfLayers.find(x=>x.name===sel.value);
+    S.prof=S.prof||{};
+    if(l)S.prof[k]={n:l.name,c:l.color}; else delete S.prof[k];
+    profMsg();
+  });
+}
+function profMsg(){
+  const n=S.prof?Object.keys(S.prof).length:0;
+  $('profMsg').textContent=n?n+' of 8 mapped — DXF exports use these layers':'Using the built-in layer names.';
+}
+function loadLayerDxf(t,name){
+  const ls=parseDxfLayers(t).filter(l=>l.name!=='Defpoints');
+  if(!ls.length){msg('No layer table found — is this a text DXF?',true);return;}
+  S.dxfLayers=ls;S.prof=S.prof||{};
+  LAYSLOT.forEach(([k])=>{if(!S.prof[k]){const g=pickHint(k,ls);if(g){const l=ls.find(x=>x.name===g);S.prof[k]={n:l.name,c:l.color};}}});
+  buildLayerUI();profMsg();
+  msg(ls.length<5?ls.length+' layers only — this drawing looks purged, try an unpurged template or a live job':
+    ls.length+' layers read from '+name+' — check the picks below');
+}
+function saveProfile(){
+  if(!S.prof||!Object.keys(S.prof).length){msg('Nothing mapped yet',true);return;}
+  save('layer-profile.json',JSON.stringify({v:1,layers:S.dxfLayers,prof:S.prof},null,1),'application/json');
+  msg('Layer profile saved — reload it here on any job');
+}
+function loadProfile(t){
+  const j=JSON.parse(t);
+  S.prof=j.prof||{};S.dxfLayers=j.layers||[];
+  buildLayerUI();profMsg();msg('Layer profile loaded');
+}
+
 /* ══════════════ interaction ══════════════ */
 let drag=null, odrag=null;
 cv.addEventListener('pointerdown',e=>{
@@ -1449,6 +1539,8 @@ function exportDXF(){
   const {faces}=usedFaces();
   const o=[];const g=(c,v)=>{o.push(c,v)};
   const safe=s=>s.replace(/[^A-Z0-9_-]/gi,'_');
+  const PF=S.prof||{}, LY=k=>(PF[k]&&PF[k].n)||LAYDEF[k][0], CL=k=>(PF[k]&&PF[k].c!=null)?PF[k].c:LAYDEF[k][1];
+  const LB=b=>PF.brk&&PF.brk.n?PF.brk.n:'BRK-'+safe(b.name);   // profile: one layer; default: one per string
   // text height scaled to the survey extent
   let mnx=Infinity,mxx=-Infinity,mny=Infinity,mxy=-Infinity;
   for(const p of S.act){mnx=Math.min(mnx,p.e);mxx=Math.max(mxx,p.e);mny=Math.min(mny,p.n);mxy=Math.max(mxy,p.n);}
@@ -1460,39 +1552,42 @@ function exportDXF(){
   const dec=(iv*5)%1===0?0:1;                          // label to the precision the index needs
   const cth=Math.max(0.15,diag*2/300);                 // contour label height
   // layer table so everything lands on named, coloured layers to sort out in CAD
-  const layers=[['SURV-POINTS',7],['SURV-LEVELS',3],['SURV-CODES',4],['TIN-TRIANGLES',8]];
-  for(const b of S.brk) if(b.on) layers.push(['BRK-'+safe(b.name),1]);
+  const layers=[[LY('pts'),CL('pts')],[LY('lev'),CL('lev')],[LY('cod'),CL('cod')],[LY('tri'),CL('tri')]];
+  const seenB=new Set();
+  for(const b of S.brk) if(b.on&&!seenB.has(LB(b))){seenB.add(LB(b));layers.push([LB(b),CL('brk')]);}
   if(S.contours.length)
-    layers.push(['CONT-INDEX-'+ivtag,30],['CONT-MINOR-'+ivtag,42],['CONT-TEXT',2]);
-  g(0,'SECTION');g(2,'TABLES');g(0,'TABLE');g(2,'LAYER');g(70,layers.length);
-  for(const [nm,col] of layers){g(0,'LAYER');g(2,nm);g(70,'0');g(62,col);g(6,'CONTINUOUS');}
+    layers.push([LY('cix')+(PF.cix?'':'-'+ivtag),CL('cix')],[LY('cmn')+(PF.cmn?'':'-'+ivtag),CL('cmn')],[LY('ctx'),CL('ctx')]);
+  const lseen=new Set(),ltab=[];
+  for(const [nm,col] of layers){if(lseen.has(nm))continue;lseen.add(nm);ltab.push([nm,col]);}
+  g(0,'SECTION');g(2,'TABLES');g(0,'TABLE');g(2,'LAYER');g(70,ltab.length);
+  for(const [nm,col] of ltab){g(0,'LAYER');g(2,nm);g(70,'0');g(62,col);g(6,'CONTINUOUS');}
   g(0,'ENDTAB');g(0,'ENDSEC');
   g(0,'SECTION');g(2,'ENTITIES');
   // triangles
   for(const t of faces){
-    g(0,'3DFACE');g(8,'TIN-TRIANGLES');
+    g(0,'3DFACE');g(8,LY('tri'));
     [0,1,2,2].forEach((v,j)=>{const p=S.act[t[v]];g(10+j,p.e.toFixed(4));g(20+j,p.n.toFixed(4));g(30+j,p.z.toFixed(4));});
   }
   // points + elevation text + code text
   for(const p of S.act){
-    g(0,'POINT');g(8,'SURV-POINTS');g(10,p.e.toFixed(4));g(20,p.n.toFixed(4));g(30,p.z.toFixed(4));
-    g(0,'TEXT');g(8,'SURV-LEVELS');g(10,(p.e+off).toFixed(4));g(20,(p.n+off).toFixed(4));g(30,p.z.toFixed(4));g(40,th.toFixed(3));g(1,p.z.toFixed(2));
-    if(p.code){g(0,'TEXT');g(8,'SURV-CODES');g(10,(p.e+off).toFixed(4));g(20,(p.n-off-th).toFixed(4));g(30,p.z.toFixed(4));g(40,th.toFixed(3));g(1,p.code);}
+    g(0,'POINT');g(8,LY('pts'));g(10,p.e.toFixed(4));g(20,p.n.toFixed(4));g(30,p.z.toFixed(4));
+    g(0,'TEXT');g(8,LY('lev'));g(10,(p.e+off).toFixed(4));g(20,(p.n+off).toFixed(4));g(30,p.z.toFixed(4));g(40,th.toFixed(3));g(1,p.z.toFixed(2));
+    if(p.code){g(0,'TEXT');g(8,LY('cod'));g(10,(p.e+off).toFixed(4));g(20,(p.n-off-th).toFixed(4));g(30,p.z.toFixed(4));g(40,th.toFixed(3));g(1,p.code);}
   }
   // breaklines
   for(const b of S.brk){
     if(!b.on)continue;
     const pts=b.ids.map(id=>S.idx.get(id)).filter(i=>i!==undefined);
     if(pts.length<2)continue;
-    g(0,'POLYLINE');g(8,'BRK-'+safe(b.name));g(66,'1');g(70,'8');
+    g(0,'POLYLINE');g(8,LB(b));g(66,'1');g(70,'8');
     g(10,'0');g(20,'0');g(30,'0');
-    for(const i of pts){const p=S.act[i];g(0,'VERTEX');g(8,'BRK-'+safe(b.name));g(70,'32');g(10,p.e.toFixed(4));g(20,p.n.toFixed(4));g(30,p.z.toFixed(4));}
+    for(const i of pts){const p=S.act[i];g(0,'VERTEX');g(8,LB(b));g(70,'32');g(10,p.e.toFixed(4));g(20,p.n.toFixed(4));g(30,p.z.toFixed(4));}
     g(0,'SEQEND');
   }
   // contours — index heavy on its own layer, minor on its own, one label per index string
   let nc=0;
   for(const c of S.contours){
-    const lay=(c.major?'CONT-INDEX-':'CONT-MINOR-')+ivtag;
+    const lay=c.major?(LY('cix')+(PF.cix?'':'-'+ivtag)):(LY('cmn')+(PF.cmn?'':'-'+ivtag));
     for(const L of c.lines){
       if(L.length<2)continue;nc++;
       g(0,'POLYLINE');g(8,lay);g(66,'1');g(70,'8');
@@ -1507,7 +1602,7 @@ function exportDXF(){
       const L=c.lines.reduce((a,b)=>b.length>a.length?b:a);
       const p=L[Math.floor(L.length/2)],q=L[Math.min(L.length-1,Math.floor(L.length/2)+1)];
       const ang=Math.atan2(q.y-p.y,q.x-p.x)*180/Math.PI;
-      g(0,'TEXT');g(8,'CONT-TEXT');
+      g(0,'TEXT');g(8,LY('ctx'));
       g(10,(p.x+S.org.e).toFixed(4));g(20,(p.y+S.org.n).toFixed(4));g(30,c.z.toFixed(4));
       g(40,cth.toFixed(3));g(1,c.z.toFixed(dec));
       g(50,(ang>90||ang<-90?ang+180:ang).toFixed(2));g(72,'1');g(73,'2');
@@ -1648,6 +1743,12 @@ $('lCon').onchange=()=>{makeContours();draw();};
 $('cSmooth').onchange=()=>{makeContours();draw();};
 $('exLX').onclick=exportLandXML;$('exDXF').onclick=exportDXF;
 $('exPRJ').onclick=exportProject;
+const rd=(f,fn)=>{const r=new FileReader();r.onload=()=>{try{fn(r.result,f.name)}catch(e){msg('Could not read that file',true)}};r.readAsText(f);};
+$('btnLayDxf').onclick=()=>$('layfile').click();
+$('layfile').onchange=e=>{const f=e.target.files[0];if(f)rd(f,loadLayerDxf);e.target.value='';};
+$('btnProfSave').onclick=saveProfile;
+$('btnProfLoad').onclick=()=>$('proffile').click();
+$('proffile').onchange=e=>{const f=e.target.files[0];if(f)rd(f,loadProfile);e.target.value='';};
 const dz=$('drop');
 ['dragenter','dragover'].forEach(t=>dz.addEventListener(t,e=>{e.preventDefault();dz.classList.add('over')}));
 ['dragleave','drop'].forEach(t=>dz.addEventListener(t,e=>{e.preventDefault();dz.classList.remove('over')}));
